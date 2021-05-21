@@ -1,0 +1,6 @@
+multiprocess==0.70.11.1
+flask==2.0.0
+flask-restful
+requests=2.25.1
+rdflib==5.0.0
+SPARQLWrapper==1.8.5
