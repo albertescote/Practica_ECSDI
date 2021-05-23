@@ -55,6 +55,10 @@ cola1 = Queue()
 # Flask stuff
 app = Flask(__name__)
 
+@app.route("/")
+def hello():
+    return "Hello, World!"
+
 
 @app.route("/comm")
 def comunicacion():
