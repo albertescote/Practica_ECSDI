@@ -16,6 +16,9 @@ Asume que el agente de registro esta en el puerto 9000
 
 from multiprocessing import Process, Queue
 import socket
+import logging
+import argparse
+
 
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
@@ -26,46 +29,86 @@ from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
 from AgentUtil.DSO import DSO
+from AgentUtil.Logging import config_logger
+from AgentUtil.Util import gethostname
 
 __author__ = 'javier'
 
-# Configuration stuff
-hostname = socket.gethostname()
-port = 9010
+# Definimos los parametros de la linea de comandos
+parser = argparse.ArgumentParser()
+parser.add_argument('--open', help="Define si el servidor est abierto al exterior o no", action='store_true',
+                    default=False)
+parser.add_argument('--verbose', help="Genera un log de la comunicacion del servidor web", action='store_true',
+                        default=False)
+parser.add_argument('--port', type=int, help="Puerto de comunicacion del agente")
+parser.add_argument('--dhost', help="Host del agente de directorio")
+parser.add_argument('--dport', type=int, help="Puerto de comunicacion del agente de directorio")
 
-agn = Namespace("http://www.agentes.org#")
-myns_pet = Namespace("http://my.namespace.org/peticiones/")
-myns_atr = Namespace("http://my.namespace.org/atributos/")
+# Logging
+logger = config_logger(level=1)
+
+# parsing de los parametros de la linea de comandos
+args = parser.parse_args()
+
+# Configuration stuff
+if args.port is None:
+    port = 9001
+else:
+    port = args.port
+
+if args.open:
+    hostname = '0.0.0.0'
+    hostaddr = gethostname()
+else:
+    hostaddr = hostname = socket.gethostname()
+
+print('DS Hostname =', hostaddr)
+
+if args.dport is None:
+    dport = 9000
+else:
+    dport = args.dport
+
+if args.dhost is None:
+    dhostname = gethostname()
+else:
+    dhostname = args.dhost
+
+# Flask stuff
+app = Flask(__name__)
+if not args.verbose:
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+
+agn = Namespace("http://www.agentes.org/")
+myns_pet = Namespace("http://www.agentes.org/peticiones/")
+myns_atr = Namespace("http://www.agentes.org/atributos/")
 
 # Contador de mensajes
 mss_cnt = 0
 
 # Datos del Agente
-
 AgenteUnificador = Agent('AgenteUnificador',
                        agn.AgenteUnificador,
-                       'http://%s:%d/comm' % (hostname, port),
-                       'http://%s:%d/Stop' % (hostname, port))
+                       'http://%s:%d/comm' % (hostaddr, port),
+                       'http://%s:%d/Stop' % (hostaddr, port))
 
 AgenteAlojamiento = Agent('AgenteAlojamiento',
                        agn.AgenteAlojamiento,
-                       'http://%s:%d/comm' % (hostname, port),
-                       'http://%s:%d/Stop' % (hostname, port))
+                       'http://%s:%d/comm' % (hostaddr, 9002),
+                       'http://%s:%d/Stop' % (hostaddr, 9002))
+
 
 # Global triplestore graph
 dsgraph = Graph()
-
-# Vinculamos todos los espacios de nombre a utilizar
-dsgraph.bind('acl', ACL)
-dsgraph.bind('rdf', RDF)
-dsgraph.bind('rdfs', RDFS)
-dsgraph.bind('foaf', FOAF)
-dsgraph.bind('dso', DSO)
 
 cola1 = Queue()
 
 # Flask stuff
 app = Flask(__name__)
+if not args.verbose:
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
 
 @app.route("/")
 def main():
@@ -86,7 +129,8 @@ def peticionPlan():
         'estrellas' : estrellas
     }
 
-    '''gm = pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio, estrellas)'''
+    gm = pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio, estrellas)
+
 
     return render_template('processingPlan.html', hotelData=hotelData)
 
@@ -130,6 +174,10 @@ def agentbehavior1(cola):
     pass
 
 def pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio, estrellas):
+
+    global mss_cnt
+    logger.info('Iniciamos busqueda de alojamiento')
+
     gmess = Graph()
     gmess.bind('myns_pet', myns_pet)
     gmess.bind('myns_atr', myns_atr)
@@ -142,11 +190,26 @@ def pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio
     gmess.add((peticion, myns_atr.minPrecio, Literal(minPrecio)))
     gmess.add((peticion, myns_atr.estrellas, Literal(estrellas)))
 
-    gr = send_message(
-        build_message(gmess, perf=ACL.request,
+    
+    gmess.bind('foaf', FOAF)
+    gmess.bind('dso', DSO)
+    req_obj = agn[AgenteUnificador.name + '-SolverAgent']
+    gmess.add((req_obj, RDF.type, DSO.SolverAgent))
+    gmess.add((req_obj, DSO.AgentType, DSO.HotelsAgent))
+    
+
+    msg = build_message(gmess, perf=ACL.request,
                       sender=AgenteUnificador.uri,
                       receiver=AgenteAlojamiento.uri,
-                      msgcnt=mss_cnt), AgenteAlojamiento.address)
+                      content=req_obj,
+                      msgcnt=mss_cnt)
+    
+    gr = send_message(msg, AgenteAlojamiento.address)
+    
+    mss_cnt += 1
+
+    logger.info('Alojamiento recibido')
+    
     return gr
 
 
