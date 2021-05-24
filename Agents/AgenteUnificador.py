@@ -118,18 +118,22 @@ def main():
 def peticionPlan():
     ciudadOrigen = request.form['ciudadOrigen']
     ciudadDestino = request.form['ciudadDestino']
+    dataIda = request.form['dataIda']
+    dataVuelta = request.form['dataVuelta']
     maxPrecio = request.form['maxPrecio']
     minPrecio = request.form['minPrecio']
     estrellas = request.form['estrellas']
     hotelData= {
         'ciudadOrigen' : ciudadOrigen,
         'ciudadDestino' : ciudadDestino,
+        'dataIda' : dataIda,
+        'dataVuelta' : dataVuelta,
         'maxPrecio' : maxPrecio,
         'minPrecio' : minPrecio,
         'estrellas' : estrellas
     }
 
-    gm = pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio, estrellas)
+    gm = pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas)
 
 
     return render_template('processingPlan.html', hotelData=hotelData)
@@ -173,7 +177,7 @@ def agentbehavior1(cola):
     """
     pass
 
-def pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio, estrellas):
+def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas):
 
     global mss_cnt
     logger.info('Iniciamos busqueda de alojamiento')
@@ -184,8 +188,9 @@ def pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio
 
     peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
-    gmess.add((peticion, myns_atr.ciudadOrigen, Literal(ciudadOrigen)))
     gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
+    gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
+    gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
     gmess.add((peticion, myns_atr.maxPrecio, Literal(maxPrecio)))
     gmess.add((peticion, myns_atr.minPrecio, Literal(minPrecio)))
     gmess.add((peticion, myns_atr.estrellas, Literal(estrellas)))
@@ -195,7 +200,7 @@ def pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio
     gmess.bind('dso', DSO)
     req_obj = agn[AgenteUnificador.name + '-SolverAgent']
     gmess.add((req_obj, RDF.type, DSO.SolverAgent))
-    gmess.add((req_obj, DSO.AgentType, DSO.HotelsAgent))
+    gmess.add((req_obj, DSO.AgentType, DSO.PersonalAgent))
     
 
     msg = build_message(gmess, perf=ACL.request,
@@ -208,19 +213,19 @@ def pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio
     
     mss_cnt += 1
 
-    logger.info('Alojamiento recibido')
+    logger.info('Alojamientos recibidos')
     
     return gr
 
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
-    ab1 = Process(target=agentbehavior1, args=(cola1,))
-    ab1.start()
+    # ab1 = Process(target=agentbehavior1, args=(cola1,))
+    # ab1.start()
 
     # Ponemos en marcha el servidor
     app.run(host=hostname, port=port)
 
     # Esperamos a que acaben los behaviors
-    ab1.join()
+    # ab1.join()
     print('The End')

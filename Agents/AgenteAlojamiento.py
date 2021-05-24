@@ -14,6 +14,7 @@ Asume que el agente de registro esta en el puerto 9000
 @author: javier
 """
 
+from Agents.InfoAmadeus import InfoAmadeus
 from Agents.AgenteUnificador import AgenteAlojamiento
 from multiprocessing import Process, Queue
 import socket
@@ -84,6 +85,7 @@ if not args.verbose:
 agn = Namespace("http://www.agentes.org/")
 myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
+myns_par = Namespace("http://my.namespace.org/parametros/")
 
 # Contador de mensajes
 mss_cnt = 0
@@ -92,6 +94,11 @@ AgenteAlojamiento = Agent('AgenteAlojamiento',
                        agn.AgenteAlojamiento,
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
+
+InfoAmadeus = Agent('InfoAmadeus',
+                       agn.InfoAmadeus,
+                       'http://%s:%d/comm' % (hostaddr, 9003),
+                       'http://%s:%d/Stop' % (hostaddr, 9003))
 
 # Global triplestore graph
 dsgraph = Graph()
@@ -152,7 +159,18 @@ def comunicacion():
             if 'content' in msgdic:
                 content = msgdic['content']
                 accion = gm.value(subject=content, predicate=RDF.type)
+            
+            peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
+            ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
+            dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
+            dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
+            maxPrecio = gm.value(subject= peticion, predicate= myns_atr.maxPrecio)
+            minPrecio = gm.value(subject= peticion, predicate= myns_atr.minPrecio)
+            estrellas = gm.value(subject= peticion, predicate= myns_atr.estrellas)
+
+            gr = getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas)
+                
             # Aqui realizariamos lo que pide la accion
             # Por ahora simplemente retornamos un Inform-done
             gr = build_message(Graph(),
@@ -195,15 +213,55 @@ def agentbehavior1(cola):
     """
     pass
 
+def getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas):
+
+    logger.info('Iniciamos busqueda en Amadeus')
+
+    global mss_cnt
+
+    # Graph para buscador
+    gmess = Graph()
+    gmess.bind('myns_pet', myns_pet)
+    gmess.bind('myns_atr', myns_atr)
+
+    busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
+    gmess.add((busqueda, myns_par.ciudadDestino, Literal(ciudadDestino)))
+    gmess.add((busqueda, myns_par.dataIda, Literal(dataIda)))
+    gmess.add((busqueda, myns_par.dataVuelta, Literal(dataVuelta)))
+    gmess.add((busqueda, myns_par.maxPrecio, Literal(maxPrecio)))      
+    gmess.add((busqueda, myns_par.minPrecio, Literal(minPrecio)))
+    gmess.add((busqueda, myns_par.estrellas, Literal(estrellas)))
+
+    gmess.bind('foaf', FOAF)
+    gmess.bind('dso', DSO)
+    req_obj = agn[AgenteAlojamiento.name + '-InfoAgent']
+    gmess.add((req_obj, RDF.type, DSO.InfoAgent))
+    gmess.add((req_obj, DSO.AgentType, DSO.HotelsAgent))
+    
+
+    msg = build_message(gmess, perf=ACL.request,
+                      sender=AgenteAlojamiento.uri,
+                      receiver=InfoAmadeus.uri,
+                      content=req_obj,
+                      msgcnt=mss_cnt)
+
+    gr = send_message(msg, InfoAmadeus.address)
+    
+    mss_cnt += 1
+
+    logger.info('Alojamientos recibidos')
+    
+    return gr
+
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
-    ab1 = Process(target=agentbehavior1, args=(cola1,))
-    ab1.start()
+    # ab1 = Process(target=agentbehavior1, args=(cola1,))
+    # ab1.start()
 
     # Ponemos en marcha el servidor
     app.run(host=hostname, port=port)
 
     # Esperamos a que acaben los behaviors
-    ab1.join()
+    # ab1.join()
     print('The End')
