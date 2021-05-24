@@ -67,6 +67,9 @@ def comunicacion():
     """
     global dsgraph
     global mss_cnt
+    
+    print('Peticion de informacion recibida\n')
+
     pass
 
 

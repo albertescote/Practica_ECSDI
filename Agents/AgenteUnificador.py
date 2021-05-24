@@ -24,7 +24,7 @@ from flask import Flask , request, render_template
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
-from AgentUtil.ACLMessages import build_message, get_message_properties
+from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
 from AgentUtil.DSO import DSO
 
 __author__ = 'javier'
@@ -34,6 +34,8 @@ hostname = socket.gethostname()
 port = 9010
 
 agn = Namespace("http://www.agentes.org#")
+myns_pet = Namespace("http://my.namespace.org/peticiones/")
+myns_atr = Namespace("http://my.namespace.org/atributos/")
 
 # Contador de mensajes
 mss_cnt = 0
@@ -84,6 +86,8 @@ def peticionPlan():
         'estrellas' : estrellas
     }
 
+    '''gm = pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio, estrellas)'''
+
     return render_template('processingPlan.html', hotelData=hotelData)
 
 
@@ -124,6 +128,26 @@ def agentbehavior1(cola):
     :return:
     """
     pass
+
+def pedirSelecciónAlojamiento(ciudadOrigen, ciudadDestino, maxPrecio, minPrecio, estrellas):
+    gmess = Graph()
+    gmess.bind('myns_pet', myns_pet)
+    gmess.bind('myns_atr', myns_atr)
+
+    peticion = myns_pet["SolicitarSelecciónAlojamiento"]
+
+    gmess.add((peticion, myns_atr.ciudadOrigen, Literal(ciudadOrigen)))
+    gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
+    gmess.add((peticion, myns_atr.maxPrecio, Literal(maxPrecio)))
+    gmess.add((peticion, myns_atr.minPrecio, Literal(minPrecio)))
+    gmess.add((peticion, myns_atr.estrellas, Literal(estrellas)))
+
+    gr = send_message(
+        build_message(gmess, perf=ACL.request,
+                      sender=AgenteUnificador.uri,
+                      receiver=AgenteAlojamiento.uri,
+                      msgcnt=mss_cnt), AgenteAlojamiento.address)
+    return gr
 
 
 if __name__ == '__main__':
