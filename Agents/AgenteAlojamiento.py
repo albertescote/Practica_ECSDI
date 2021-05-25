@@ -120,7 +120,7 @@ if not args.verbose:
 
 @app.route("/")
 def hello():
-    return "Hello, World!"
+    return "Agente alojamiento en marcha!"
 
 
 @app.route("/comm")
@@ -168,13 +168,11 @@ def comunicacion():
             maxPrecio = gm.value(subject= peticion, predicate= myns_atr.maxPrecio)
             minPrecio = gm.value(subject= peticion, predicate= myns_atr.minPrecio)
             estrellas = gm.value(subject= peticion, predicate= myns_atr.estrellas)
-
-            gr = getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas)
                 
             # Aqui realizariamos lo que pide la accion
             # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(Graph(),
-                               ACL['inform'],
+            gr = build_message(getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas),
+                               ACL['confirm'],
                                sender=AgenteAlojamiento.uri,
                                msgcnt=mss_cnt,
                                receiver=msgdic['sender'], )

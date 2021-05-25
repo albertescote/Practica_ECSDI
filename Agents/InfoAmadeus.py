@@ -23,6 +23,7 @@ from multiprocessing import Process, Queue
 import socket
 import logging
 import argparse
+import requests
 
 
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
@@ -38,6 +39,8 @@ from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
 
 __author__ = 'javier'
+
+AMADEUS_END_POINT = 'https://test.api.amadeus.com/v2/shopping/hotel-offers'
 
 amadeus = Client(
     client_id=AMADEUS_KEY,
@@ -91,9 +94,11 @@ if not args.verbose:
     log.setLevel(logging.ERROR)
 
 agn = Namespace("http://www.agentes.org/")
+myns = Namespace("http://www.agentes.org/")
 myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
 myns_par = Namespace("http://my.namespace.org/parametros/")
+myns_hot = Namespace("http://my.namespace.org/hoteles/")
 
 # Contador de mensajes
 mss_cnt = 0
@@ -123,7 +128,7 @@ if not args.verbose:
 
 @app.route("/")
 def hello():
-    return "Hello, World!"
+    return "Agente InfoAmadeus en marcha!"
 
 
 @app.route("/comm")
@@ -172,17 +177,25 @@ def comunicacion():
             minPrecio = gm.value(subject= busqueda, predicate= myns_atr.minPrecio)
             estrellas = gm.value(subject= busqueda, predicate= myns_atr.estrellas)
 
-            ppr = PrettyPrinter(indent=4)
+            #response = amadeus.get('https://test.api.amadeus.com/v2/shopping/hotel-offers', cityCode='BCN', roomQuantity=1, adults=2, radius=5, radiusUnit='KM', paymentPolicy='NONE', includeClosed=False, bestRateOnly=True, view='FULL', sort='NONE')
+                      
 
-            response = amadeus.shopping.hotel_offers.get(cityCode='BCN', checkInDate='2021-07-03', checkOutDate='2021-07-05')
+            response = amadeus.shopping.hotel_offers.get(cityCode='BCN')
             
-            print (response.data)
+            gr = Graph()
+            gr.bind('myns_hot', myns_hot)
+
+            for h in response.data:
+                hotel = h['hotel']['hotelId']
+                hotel_obj = myns_hot[hotel]
+                gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+                gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
 
             # Aqui realizariamos lo que pide la accion
             # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(Graph(),
-                               ACL['inform'],
-                               sender=AgenteAlojamiento.uri,
+            gr = build_message(gr,
+                               ACL['confirm'],
+                               sender=InfoAmadeus.uri,
                                msgcnt=mss_cnt,
                                receiver=msgdic['sender'], )
     mss_cnt += 1

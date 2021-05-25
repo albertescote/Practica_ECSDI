@@ -81,6 +81,7 @@ if not args.verbose:
     log.setLevel(logging.ERROR)
 
 agn = Namespace("http://www.agentes.org/")
+myns = Namespace("http://www.agentes.org/")
 myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
 
@@ -123,6 +124,12 @@ def peticionPlan():
     maxPrecio = request.form['maxPrecio']
     minPrecio = request.form['minPrecio']
     estrellas = request.form['estrellas']
+    
+    nombres = ''
+    gm = pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas)
+    for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
+        nombre = gm.value(subject=s, predicate=myns_atr.nombre)
+
     hotelData= {
         'ciudadOrigen' : ciudadOrigen,
         'ciudadDestino' : ciudadDestino,
@@ -130,11 +137,9 @@ def peticionPlan():
         'dataVuelta' : dataVuelta,
         'maxPrecio' : maxPrecio,
         'minPrecio' : minPrecio,
-        'estrellas' : estrellas
+        'estrellas' : estrellas,
+        'nombreHotel': nombre
     }
-
-    gm = pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas)
-
 
     return render_template('processingPlan.html', hotelData=hotelData)
 
