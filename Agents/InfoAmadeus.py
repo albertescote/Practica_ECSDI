@@ -187,6 +187,7 @@ def comunicacion():
                                                     roomQuantity=int(roomQuantity),
                                                     adults=int(adults),
                                                     radius=int(radius),
+                                                    ratings=int(estrellas),
                                                     priceRange=str(precioHotel),
                                                     currency='EUR'
                                                     )
