@@ -170,17 +170,26 @@ def comunicacion():
 
             busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
 
-            ciudadDestino = gm.value(subject= busqueda, predicate= myns_atr.ciudadDestino)
-            dataIda = gm.value(subject= busqueda, predicate= myns_atr.dataIda)
-            dataVuelta = gm.value(subject= busqueda, predicate= myns_atr.dataVuelta)
-            maxPrecio = gm.value(subject= busqueda, predicate= myns_atr.maxPrecio)
-            minPrecio = gm.value(subject= busqueda, predicate= myns_atr.minPrecio)
-            estrellas = gm.value(subject= busqueda, predicate= myns_atr.estrellas)
+            ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
+            dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
+            dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
+            precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
+            estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
+            roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
+            adults = gm.value(subject= busqueda, predicate= myns_par.adults)
+            radius = gm.value(subject= busqueda, predicate= myns_par.radius)
 
             #response = amadeus.get('https://test.api.amadeus.com/v2/shopping/hotel-offers', cityCode='BCN', roomQuantity=1, adults=2, radius=5, radiusUnit='KM', paymentPolicy='NONE', includeClosed=False, bestRateOnly=True, view='FULL', sort='NONE')
                       
-
-            response = amadeus.shopping.hotel_offers.get(cityCode='BCN')
+            response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino), 
+                                                    checkInDate=str(dataIda), 
+                                                    checkOutDate=str(dataVuelta),
+                                                    roomQuantity=int(roomQuantity),
+                                                    adults=int(adults),
+                                                    radius=int(radius),
+                                                    priceRange=str(precioHotel),
+                                                    currency='EUR'
+                                                    )
             
             gr = Graph()
             gr.bind('myns_hot', myns_hot)

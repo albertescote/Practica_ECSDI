@@ -33,6 +33,7 @@ from AgentUtil.ACLMessages import build_message, send_message, get_message_prope
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
+from AgentUtil.CodigosIATA import IATA
 
 __author__ = 'javier'
 
@@ -163,15 +164,18 @@ def comunicacion():
             peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
             ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
+            ciudadIATA = convertirIATA(ciudadDestino)
             dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
             dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
-            maxPrecio = gm.value(subject= peticion, predicate= myns_atr.maxPrecio)
-            minPrecio = gm.value(subject= peticion, predicate= myns_atr.minPrecio)
+            precioHotel = gm.value(subject= peticion, predicate= myns_atr.precioHotel)
             estrellas = gm.value(subject= peticion, predicate= myns_atr.estrellas)
+            roomQuantity = gm.value(subject= peticion, predicate= myns_atr.roomQuantity)
+            adults = gm.value(subject= peticion, predicate= myns_atr.adults)
+            radius = gm.value(subject= peticion, predicate= myns_atr.radius)
                 
             # Aqui realizariamos lo que pide la accion
             # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas),
+            gr = build_message(getInfoHotels(ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
                                ACL['confirm'],
                                sender=AgenteAlojamiento.uri,
                                msgcnt=mss_cnt,
@@ -211,7 +215,7 @@ def agentbehavior1(cola):
     """
     pass
 
-def getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas):
+def getInfoHotels(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
 
     logger.info('Iniciamos busqueda en Amadeus')
 
@@ -221,14 +225,17 @@ def getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estr
     gmess = Graph()
     gmess.bind('myns_pet', myns_pet)
     gmess.bind('myns_atr', myns_atr)
-
+    
     busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
+
     gmess.add((busqueda, myns_par.ciudadDestino, Literal(ciudadDestino)))
     gmess.add((busqueda, myns_par.dataIda, Literal(dataIda)))
     gmess.add((busqueda, myns_par.dataVuelta, Literal(dataVuelta)))
-    gmess.add((busqueda, myns_par.maxPrecio, Literal(maxPrecio)))      
-    gmess.add((busqueda, myns_par.minPrecio, Literal(minPrecio)))
+    gmess.add((busqueda, myns_par.precioHotel, Literal(precioHotel)))      
     gmess.add((busqueda, myns_par.estrellas, Literal(estrellas)))
+    gmess.add((busqueda, myns_par.roomQuantity, Literal(roomQuantity)))
+    gmess.add((busqueda, myns_par.adults, Literal(adults)))
+    gmess.add((busqueda, myns_par.radius, Literal(radius)))
 
     gmess.bind('foaf', FOAF)
     gmess.bind('dso', DSO)
@@ -250,6 +257,9 @@ def getInfoHotels(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estr
     logger.info('Alojamientos recibidos')
     
     return gr
+
+def convertirIATA(ciudad):
+    return IATA[str(ciudad)]
 
 
 if __name__ == '__main__':

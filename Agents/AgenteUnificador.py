@@ -121,23 +121,28 @@ def peticionPlan():
     ciudadDestino = request.form['ciudadDestino']
     dataIda = request.form['dataIda']
     dataVuelta = request.form['dataVuelta']
-    maxPrecio = request.form['maxPrecio']
-    minPrecio = request.form['minPrecio']
+    precioHotel = request.form['precioHotel']
     estrellas = request.form['estrellas']
+    roomQuantity = request.form['roomQuantity']
+    adults = request.form['adults']
+    radius = request.form['radius']
     
-    nombres = ''
-    gm = pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas)
+    nombre=''
+    gm = pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
     for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
         nombre = gm.value(subject=s, predicate=myns_atr.nombre)
+        logger.info(nombre)
 
     hotelData= {
         'ciudadOrigen' : ciudadOrigen,
         'ciudadDestino' : ciudadDestino,
         'dataIda' : dataIda,
         'dataVuelta' : dataVuelta,
-        'maxPrecio' : maxPrecio,
-        'minPrecio' : minPrecio,
+        'precioHotel' : precioHotel,
         'estrellas' : estrellas,
+        'roomQuantity': roomQuantity,
+        'adults': adults,
+        'radius': radius,
         'nombreHotel': nombre
     }
 
@@ -182,7 +187,7 @@ def agentbehavior1(cola):
     """
     pass
 
-def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, maxPrecio, minPrecio, estrellas):
+def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
 
     global mss_cnt
     logger.info('Iniciamos busqueda de alojamiento')
@@ -196,9 +201,11 @@ def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, maxPrecio, mi
     gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
     gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
     gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
-    gmess.add((peticion, myns_atr.maxPrecio, Literal(maxPrecio)))
-    gmess.add((peticion, myns_atr.minPrecio, Literal(minPrecio)))
+    gmess.add((peticion, myns_atr.precioHotel, Literal(precioHotel)))
     gmess.add((peticion, myns_atr.estrellas, Literal(estrellas)))
+    gmess.add((peticion, myns_atr.roomQuantity, Literal(roomQuantity)))
+    gmess.add((peticion, myns_atr.adults, Literal(adults)))
+    gmess.add((peticion, myns_atr.radius, Literal(radius)))
 
     
     gmess.bind('foaf', FOAF)
