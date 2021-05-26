@@ -31,6 +31,7 @@ from AgentUtil.ACLMessages import build_message, send_message, get_message_prope
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
+from AgentUtil.CodigosIATA import IATA
 
 __author__ = 'javier'
 
@@ -119,6 +120,8 @@ def main():
 def peticionPlan():
     ciudadOrigen = request.form['ciudadOrigen']
     ciudadDestino = request.form['ciudadDestino']
+    ciudadIATA_origen = convertirIATA(ciudadOrigen)
+    ciudadIATA_destino = convertirIATA(ciudadDestino)
     dataIda = request.form['dataIda']
     dataVuelta = request.form['dataVuelta']
     precioHotel = request.form['precioHotel']
@@ -128,10 +131,9 @@ def peticionPlan():
     radius = request.form['radius']
     
     nombre=''
-    gm = pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
+    gm = pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
     for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
         nombre = gm.value(subject=s, predicate=myns_atr.nombre)
-        logger.info(nombre)
 
     hotelData= {
         'ciudadOrigen' : ciudadOrigen,
@@ -187,7 +189,7 @@ def agentbehavior1(cola):
     """
     pass
 
-def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+def pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
 
     global mss_cnt
     logger.info('Iniciamos busqueda de alojamiento')
@@ -198,8 +200,7 @@ def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, 
 
     peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
-    logger.info(ciudadDestino)
-
+    gmess.add((peticion, myns_atr.ciudadIATA_destino, Literal(ciudadIATA_destino)))
     gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
     gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
     gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
@@ -230,6 +231,9 @@ def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, 
     logger.info('Alojamientos recibidos')
     
     return gr
+
+def convertirIATA(ciudad):
+    return IATA[str(ciudad)]
 
 
 if __name__ == '__main__':

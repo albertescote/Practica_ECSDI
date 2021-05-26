@@ -33,7 +33,6 @@ from AgentUtil.ACLMessages import build_message, send_message, get_message_prope
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
-from AgentUtil.CodigosIATA import IATA
 
 __author__ = 'javier'
 
@@ -249,9 +248,8 @@ def agentbehavior1(cola):
 def resolverPlan(addr, ragn_uri, gm):
     peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
+    ciudadIATA_destino = gm.value(subject= peticion, predicate= myns_atr.ciudadIATA_destino)
     ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
-    logger.info(ciudadDestino)
-    ciudadIATA = convertirIATA(ciudadDestino)
     dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
     dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
     precioHotel = gm.value(subject= peticion, predicate= myns_atr.precioHotel)
@@ -260,7 +258,7 @@ def resolverPlan(addr, ragn_uri, gm):
     adults = gm.value(subject= peticion, predicate= myns_atr.adults)
     radius = gm.value(subject= peticion, predicate= myns_atr.radius)
             
-    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
+    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA_destino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
                         ACL['confirm'],
                         sender=AgenteAlojamiento.uri,
                         msgcnt=mss_cnt,
@@ -311,9 +309,6 @@ def getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA, dataIda, dataVuelta
     logger.info('Alojamientos recibidos')
     
     return gr
-
-def convertirIATA(ciudad):
-    return IATA[str(ciudad)]
 
 
 if __name__ == '__main__':
