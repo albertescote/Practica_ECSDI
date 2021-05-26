@@ -75,7 +75,7 @@ if args.open:
 else:
     hostaddr = hostname = socket.gethostname()
 
-print('DS Hostname =', hostaddr)
+print('Hostname =', hostaddr)
 
 if args.dport is None:
     dport = 9000
@@ -83,7 +83,7 @@ else:
     dport = args.dport
 
 if args.dhost is None:
-    dhostname = gethostname()
+    dhostname = socket.gethostname()
 else:
     dhostname = args.dhost
 
@@ -108,6 +108,14 @@ InfoAmadeus = Agent('InfoAmadeus',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
+print("DS hostname: ", dhostname)
+print("DS port: ", dport)
+# Directory agent address
+DirectoryAgent = Agent('DirectoryAgent',
+                       agn.Directory,
+                       'http://%s:%d/Register' % (dhostname, dport),
+                       'http://%s:%d/Stop' % (dhostname, dport))
+
 # Global triplestore graph
 dsgraph = Graph()
 
@@ -125,6 +133,43 @@ app = Flask(__name__)
 if not args.verbose:
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
+
+def register_message():
+    """
+    Envia un mensaje de registro al servicio de registro
+    usando una performativa Request y una accion Register del
+    servicio de directorio
+    :param gmess:
+    :return:
+    """
+
+    logger.info('Nos registramos')
+
+    global mss_cnt
+
+    gmess = Graph()
+
+    # Construimos el mensaje de registro
+    gmess.bind('foaf', FOAF)
+    gmess.bind('dso', DSO)
+    reg_obj = agn[InfoAmadeus.name + '-Register']
+    gmess.add((reg_obj, RDF.type, DSO.Register))
+    gmess.add((reg_obj, DSO.Uri, InfoAmadeus.uri))
+    gmess.add((reg_obj, FOAF.name, Literal(InfoAmadeus.name)))
+    gmess.add((reg_obj, DSO.Address, Literal(InfoAmadeus.address)))
+    gmess.add((reg_obj, DSO.AgentType, DSO.HotelsAgent))
+
+    # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
+    gr = send_message(
+        build_message(gmess, perf=ACL.request,
+                      sender=InfoAmadeus.uri,
+                      receiver=DirectoryAgent.uri,
+                      content=reg_obj,
+                      msgcnt=mss_cnt),
+        DirectoryAgent.address)
+    mss_cnt += 1
+
+    return gr
 
 @app.route("/")
 def hello():
@@ -168,46 +213,13 @@ def comunicacion():
                 content = msgdic['content']
                 accion = gm.value(subject=content, predicate=RDF.type)
 
-            busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
-
-            ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-            dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
-            dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
-            precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
-            estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
-            roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
-            adults = gm.value(subject= busqueda, predicate= myns_par.adults)
-            radius = gm.value(subject= busqueda, predicate= myns_par.radius)
-
-            #response = amadeus.get('https://test.api.amadeus.com/v2/shopping/hotel-offers', cityCode='BCN', roomQuantity=1, adults=2, radius=5, radiusUnit='KM', paymentPolicy='NONE', includeClosed=False, bestRateOnly=True, view='FULL', sort='NONE')
-                      
-            response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino), 
-                                                    checkInDate=str(dataIda), 
-                                                    checkOutDate=str(dataVuelta),
-                                                    roomQuantity=int(roomQuantity),
-                                                    adults=int(adults),
-                                                    radius=int(radius),
-                                                    ratings=int(estrellas),
-                                                    priceRange=str(precioHotel),
-                                                    currency='EUR'
-                                                    )
-            
-            gr = Graph()
-            gr.bind('myns_hot', myns_hot)
-
-            for h in response.data:
-                hotel = h['hotel']['hotelId']
-                hotel_obj = myns_hot[hotel]
-                gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-                gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
-
-            # Aqui realizariamos lo que pide la accion
-            # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(gr,
-                               ACL['confirm'],
-                               sender=InfoAmadeus.uri,
-                               msgcnt=mss_cnt,
-                               receiver=msgdic['sender'], )
+            if accion == DSO.InfoAgent:
+                gr = infoHoteles(gm, msgdic)
+            else:
+                gr = build_message(Graph(),
+                                   ACL['not-understood'],
+                                   sender=AgenteAlojamiento.uri,
+                                   msgcnt=mss_cnt)    
     mss_cnt += 1
 
     logger.info('Respondemos a la peticion')
@@ -238,20 +250,73 @@ def tidyup():
 def agentbehavior1(cola):
     """
     Un comportamiento del agente
-
     :return:
     """
-    pass
+    # Registramos el agente
+    gr = register_message()
+
+    # Escuchando la cola hasta que llegue un 0
+    fin = False
+    while not fin:
+        while cola.empty():
+            pass
+        v = cola.get()
+        if v == 0:
+            fin = True
+        else:
+            print(v)
+
+def infoHoteles(gm, msgdic):
+    busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
+
+    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
+    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
+    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
+    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
+    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
+    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
+    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
+    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
+                      
+    #response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino), 
+    #                                           checkInDate=str(dataIda), 
+    #                                            checkOutDate=str(dataVuelta),
+    #                                            roomQuantity=int(roomQuantity),
+    #                                            adults=int(adults),
+    #                                            radius=int(radius),
+    #                                            ratings=int(estrellas),
+    #                                            priceRange=str(precioHotel),
+    #                                            currency='EUR'
+    #                                            )
+    response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino))
+            
+    gr = Graph()
+    gr.bind('myns_hot', myns_hot)
+
+    for h in response.data:
+        hotel = h['hotel']['hotelId']
+        hotel_obj = myns_hot[hotel]
+        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+        gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
+
+        # Aqui realizariamos lo que pide la accion
+        # Por ahora simplemente retornamos un Inform-done
+        gr = build_message(gr,
+                        ACL['confirm'],
+                        sender=InfoAmadeus.uri,
+                        msgcnt=mss_cnt,
+                        receiver=msgdic['sender'], )
+    return gr
 
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
-    # ab1 = Process(target=agentbehavior1, args=(cola1,))
-    # ab1.start()
+    ab1 = Process(target=agentbehavior1, args=(cola1,))
+    ab1.start()
 
     # Ponemos en marcha el servidor
     app.run(host=hostname, port=port)
 
     # Esperamos a que acaben los behaviors
-    # ab1.join()
-    print('The End')
+    ab1.join()
+    logger.info('The End')

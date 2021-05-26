@@ -198,6 +198,8 @@ def pedirSelecciónAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, 
 
     peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
+    logger.info(ciudadDestino)
+
     gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
     gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
     gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))

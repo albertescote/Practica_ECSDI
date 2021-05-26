@@ -73,7 +73,7 @@ else:
     dport = args.dport
 
 if args.dhost is None:
-    dhostname = gethostname()
+    dhostname = socket.gethostname()
 else:
     dhostname = args.dhost
 
@@ -96,10 +96,11 @@ AgenteAlojamiento = Agent('AgenteAlojamiento',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
-InfoAmadeus = Agent('InfoAmadeus',
-                       agn.InfoAmadeus,
-                       'http://%s:%d/comm' % (hostaddr, 9003),
-                       'http://%s:%d/Stop' % (hostaddr, 9003))
+# Directory agent address
+DirectoryAgentHotels = Agent('DirectoryAgentHotels',
+                       agn.DirectoryAgentHotels,
+                       'http://%s:%d/Register' % (dhostname, dport),
+                       'http://%s:%d/Stop' % (dhostname, dport))
 
 # Global triplestore graph
 dsgraph = Graph()
@@ -160,26 +161,27 @@ def comunicacion():
             if 'content' in msgdic:
                 content = msgdic['content']
                 accion = gm.value(subject=content, predicate=RDF.type)
-            
-            peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
-            ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
-            ciudadIATA = convertirIATA(ciudadDestino)
-            dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
-            dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
-            precioHotel = gm.value(subject= peticion, predicate= myns_atr.precioHotel)
-            estrellas = gm.value(subject= peticion, predicate= myns_atr.estrellas)
-            roomQuantity = gm.value(subject= peticion, predicate= myns_atr.roomQuantity)
-            adults = gm.value(subject= peticion, predicate= myns_atr.adults)
-            radius = gm.value(subject= peticion, predicate= myns_atr.radius)
-                
-            # Aqui realizariamos lo que pide la accion
-            # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(getInfoHotels(ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
-                               ACL['confirm'],
-                               sender=AgenteAlojamiento.uri,
-                               msgcnt=mss_cnt,
-                               receiver=msgdic['sender'], )
+            if accion == DSO.SolverAgent:
+                # Buscamos en el directorio
+                # un agente de hoteles
+                gmess = directory_search_message(DSO.HotelsAgent)
+
+                # Obtenemos la direccion del agente de la respuesta
+                # No hacemos ninguna comprobacion sobre si es un mensaje valido
+                msg = gmess.value(predicate=RDF.type, object=ACL.FipaAclMessage)
+                content = gmess.value(subject=msg, predicate=ACL.content)
+                ragn_addr = gmess.value(subject=content, predicate=DSO.Address)
+                ragn_uri = gmess.value(subject=content, predicate=DSO.Uri)
+
+                gr = resolverPlan(ragn_addr, ragn_uri, gm)
+            else:
+                gr = build_message(Graph(),
+                                   ACL['not-understood'],
+                                   sender=AgenteAlojamiento.uri,
+                                   msgcnt=mss_cnt)
+            
+            
     mss_cnt += 1
 
     logger.info('Respondemos a la peticion')
@@ -206,18 +208,69 @@ def tidyup():
     """
     pass
 
+def directory_search_message(type):
+    """
+    Busca en el servicio de registro mandando un
+    mensaje de request con una accion Search del servicio de directorio
+    Podria ser mas adecuado mandar un query-ref y una descripcion de registo
+    con variables
+    :param type:
+    :return:
+    """
+    global mss_cnt
+    logger.info('Buscamos en el servicio de registro')
+
+    gmess = Graph()
+
+    gmess.bind('foaf', FOAF)
+    gmess.bind('dso', DSO)
+    reg_obj = agn[AgenteAlojamiento.name + '-search']
+    gmess.add((reg_obj, RDF.type, DSO.Search))
+    gmess.add((reg_obj, DSO.AgentType, type))
+
+    msg = build_message(gmess, perf=ACL.request,
+                        sender=AgenteAlojamiento.uri,
+                        receiver=DirectoryAgentHotels.uri,
+                        content=reg_obj,
+                        msgcnt=mss_cnt)
+    gr = send_message(msg, DirectoryAgentHotels.address)
+    mss_cnt += 1
+    logger.info('Recibimos informacion del agente')
+
+    return gr
+
 
 def agentbehavior1(cola):
     """
     Un comportamiento del agente
-
     :return:
     """
-    pass
 
-def getInfoHotels(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+def resolverPlan(addr, ragn_uri, gm):
+    peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
-    logger.info('Iniciamos busqueda en Amadeus')
+    ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
+    logger.info(ciudadDestino)
+    ciudadIATA = convertirIATA(ciudadDestino)
+    dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
+    dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
+    precioHotel = gm.value(subject= peticion, predicate= myns_atr.precioHotel)
+    estrellas = gm.value(subject= peticion, predicate= myns_atr.estrellas)
+    roomQuantity = gm.value(subject= peticion, predicate= myns_atr.roomQuantity)
+    adults = gm.value(subject= peticion, predicate= myns_atr.adults)
+    radius = gm.value(subject= peticion, predicate= myns_atr.radius)
+            
+    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
+                        ACL['confirm'],
+                        sender=AgenteAlojamiento.uri,
+                        msgcnt=mss_cnt,
+                        receiver=ragn_uri, 
+                    )
+    return gr
+
+def getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+
+    logger.info('Iniciamos busqueda en agente de informacion')
 
     global mss_cnt
 
@@ -246,11 +299,11 @@ def getInfoHotels(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, ro
 
     msg = build_message(gmess, perf=ACL.request,
                       sender=AgenteAlojamiento.uri,
-                      receiver=InfoAmadeus.uri,
+                      receiver=ragn_uri,
                       content=req_obj,
                       msgcnt=mss_cnt)
 
-    gr = send_message(msg, InfoAmadeus.address)
+    gr = send_message(msg, addr)
     
     mss_cnt += 1
 
@@ -264,12 +317,12 @@ def convertirIATA(ciudad):
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
-    # ab1 = Process(target=agentbehavior1, args=(cola1,))
-    # ab1.start()
+    #ab1 = Process(target=agentbehavior1)
+    #ab1.start()
 
     # Ponemos en marcha el servidor
     app.run(host=hostname, port=port)
 
     # Esperamos a que acaben los behaviors
-    # ab1.join()
-    print('The End')
+    #ab1.join()
+    logger.info('The End')
