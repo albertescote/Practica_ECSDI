@@ -260,7 +260,7 @@ def resolverPlan(addr, ragn_uri, gm):
     adults = gm.value(subject= peticion, predicate= myns_atr.adults)
     radius = gm.value(subject= peticion, predicate= myns_atr.radius)
             
-    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
+    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
                         ACL['confirm'],
                         sender=AgenteAlojamiento.uri,
                         msgcnt=mss_cnt,
@@ -268,7 +268,7 @@ def resolverPlan(addr, ragn_uri, gm):
                     )
     return gr
 
-def getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+def getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
 
     logger.info('Iniciamos busqueda en agente de informacion')
 
@@ -282,6 +282,7 @@ def getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHote
     busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
 
     gmess.add((busqueda, myns_par.ciudadDestino, Literal(ciudadDestino)))
+    gmess.add((busqueda, myns_par.ciudadIATA, Literal(ciudadIATA)))
     gmess.add((busqueda, myns_par.dataIda, Literal(dataIda)))
     gmess.add((busqueda, myns_par.dataVuelta, Literal(dataVuelta)))
     gmess.add((busqueda, myns_par.precioHotel, Literal(precioHotel)))      

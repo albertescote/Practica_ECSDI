@@ -232,26 +232,17 @@ def tidyup():
     cola1.put(0)
 
 
-def agentbehavior1(cola):
+def agentbehavior1():
     """
     Behaviour que simplemente espera mensajes de una cola y los imprime
     hasta que llega un 0 a la cola
     """
-    fin = False
-    while not fin:
-        while cola.empty():
-            pass
-        v = cola.get()
-        if v == 0:
-            print(v)
-            return 0
-        else:
-            print(v)
+    pass
 
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviours como procesos
-    ab1 = Process(target=agentbehavior1, args=(cola1,))
+    ab1 = Process(target=agentbehavior1)
     ab1.start()
 
     # Ponemos en marcha el servidor Flask
