@@ -16,9 +16,7 @@ AgentTourpedia
 
 from amadeus import Client, ResponseError
 from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
-from pprint import PrettyPrinter
 
-from Agents.AgenteUnificador import AgenteAlojamiento
 from multiprocessing import Process, Queue
 import socket
 import logging
@@ -28,7 +26,7 @@ import requests
 
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
-from flask import Flask , request, render_template  
+from flask import Flask , request
 
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
@@ -173,7 +171,7 @@ def register_message():
 
 @app.route("/")
 def hello():
-    return "Agente InfoAmadeus en marcha!"
+    return "Agente InfoTourpedia en marcha!"
 
 
 @app.route("/comm")
@@ -196,14 +194,14 @@ def comunicacion():
     # Comprobamos que sea un mensaje FIPA ACL
     if msgdic is None:
         # Si no es, respondemos que no hemos entendido el mensaje
-        gr = build_message(Graph(), ACL['not-understood'], sender=AgenteAlojamiento.uri, msgcnt=mss_cnt)
+        gr = build_message(Graph(), ACL['not-understood'], sender=InfoTourpedia.uri, msgcnt=mss_cnt)
     else:
         # Obtenemos la performativa
         perf = msgdic['performative']
 
         if perf != ACL.request:
             # Si no es un request, respondemos que no hemos entendido el mensaje
-            gr = build_message(Graph(), ACL['not-understood'], sender=AgenteAlojamiento.uri, msgcnt=mss_cnt)
+            gr = build_message(Graph(), ACL['not-understood'], sender=InfoTourpedia.uri, msgcnt=mss_cnt)
         else:
             # Extraemos el objeto del contenido que ha de ser una accion de la ontologia de acciones del agente
             # de registro
@@ -218,7 +216,7 @@ def comunicacion():
             else:
                 gr = build_message(Graph(),
                                    ACL['not-understood'],
-                                   sender=AgenteAlojamiento.uri,
+                                   sender=InfoTourpedia.uri,
                                    msgcnt=mss_cnt)    
     mss_cnt += 1
 

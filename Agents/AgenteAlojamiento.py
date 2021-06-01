@@ -14,8 +14,6 @@ Asume que el agente de registro esta en el puerto 9000
 @author: javier
 """
 
-from Agents.InfoAmadeus import InfoAmadeus
-from Agents.AgenteUnificador import AgenteAlojamiento
 from multiprocessing import Process, Queue
 import socket
 import logging

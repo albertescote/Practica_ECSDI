@@ -16,15 +16,11 @@ Asume que el agente de registro esta en el puerto 9000
 
 from amadeus import Client, ResponseError
 from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
-from pprint import PrettyPrinter
 
-from Agents.AgenteUnificador import AgenteAlojamiento
 from multiprocessing import Process, Queue
 import socket
 import logging
 import argparse
-import requests
-
 
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
@@ -196,14 +192,14 @@ def comunicacion():
     # Comprobamos que sea un mensaje FIPA ACL
     if msgdic is None:
         # Si no es, respondemos que no hemos entendido el mensaje
-        gr = build_message(Graph(), ACL['not-understood'], sender=AgenteAlojamiento.uri, msgcnt=mss_cnt)
+        gr = build_message(Graph(), ACL['not-understood'], sender=InfoAmadeus.uri, msgcnt=mss_cnt)
     else:
         # Obtenemos la performativa
         perf = msgdic['performative']
 
         if perf != ACL.request:
             # Si no es un request, respondemos que no hemos entendido el mensaje
-            gr = build_message(Graph(), ACL['not-understood'], sender=AgenteAlojamiento.uri, msgcnt=mss_cnt)
+            gr = build_message(Graph(), ACL['not-understood'], sender=InfoAmadeus.uri, msgcnt=mss_cnt)
         else:
             # Extraemos el objeto del contenido que ha de ser una accion de la ontologia de acciones del agente
             # de registro
@@ -218,7 +214,7 @@ def comunicacion():
             else:
                 gr = build_message(Graph(),
                                    ACL['not-understood'],
-                                   sender=AgenteAlojamiento.uri,
+                                   sender=InfoAmadeus.uri,
                                    msgcnt=mss_cnt)    
     mss_cnt += 1
 
@@ -299,8 +295,8 @@ def infoHoteles(gm, msgdic):
                             sender=InfoAmadeus.uri,
                             msgcnt=mss_cnt,
                             receiver=msgdic['sender'], )
-    except:
-        logger.info('Parameters not correct')
+    except ResponseError as error:
+        logger.info(error)
         gr = build_message(gr,
                             ACL['failure'],
                             sender=InfoAmadeus.uri,
