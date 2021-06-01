@@ -271,28 +271,35 @@ def infoHoteles(gm, msgdic):
     gr = Graph()
     try:
         response = requests.get(TOURPEDIA_END_POINT+ 'getPlaces',
-                    params={'location': ciudadDestino, 'category': 'accommodation'})
+                    params={'location': ciudadDestino, 'category': 'accommodation', 'name' : 'Hotel'})
 
         hoteles = response.json()
-        
                 
         gr.bind('myns_hot', myns_hot)
 
-        for h in hoteles:
-            hotel = h['id']
-            r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
-            detalles_hotel = r.json()
-            hotel_obj = myns_hot[hotel]
-            gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-            gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_hotel['name'])))
+        #for h in hoteles:
+        #    hotel = h['id']
+        #    r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
+        #    detalles_hotel = r.json()
+        #    hotel_obj = myns_hot[hotel]
+        #    gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+        #    gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_hotel['name'])))
 
-            # Aqui realizariamos lo que pide la accion
-            # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(gr,
-                            ACL['confirm'],
-                            sender=InfoTourpedia.uri,
-                            msgcnt=mss_cnt,
-                            receiver=msgdic['sender'], )
+        h = hoteles[0]
+        hotelID = h['id']
+        r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
+        detalles_hotel = r.json()
+        hotel_obj = myns_hot[hotelID]
+        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+        gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_hotel['name'])))
+        gr.add((hotel_obj, myns_atr.direccion, Literal(h['address'])))
+        # Aqui realizariamos lo que pide la accion
+        # Por ahora simplemente retornamos un Inform-done
+        gr = build_message(gr,
+                        ACL['confirm'],
+                        sender=InfoTourpedia.uri,
+                        msgcnt=mss_cnt,
+                        receiver=msgdic['sender'], )
     except:
         logger.info('Location not found on database')
         gr = build_message(gr,

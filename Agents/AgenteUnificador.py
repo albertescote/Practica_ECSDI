@@ -135,6 +135,7 @@ def peticionPlan():
         ciudadIATA_origen = convertirIATA(ciudadOrigen)
         ciudadIATA_destino = convertirIATA(ciudadDestino)
         nombre=''
+        direccion=''
         gm = pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
         
         msgdic = get_message_properties(gm)
@@ -152,6 +153,7 @@ def peticionPlan():
         else:
             for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
                 nombre = gm.value(subject=s, predicate=myns_atr.nombre)
+                direccion = gm.value(subject=s, predicate=myns_atr.direccion)
 
             hotelData= {
                 'ciudadOrigen' : ciudadOrigen,
@@ -159,6 +161,7 @@ def peticionPlan():
                 'dataIda' : dataIda,
                 'dataVuelta' : dataVuelta,
                 'nombreHotel': nombre,
+                'direccion' : direccion,
                 'error': 0
             }
     except:
