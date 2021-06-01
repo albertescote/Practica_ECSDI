@@ -1,2 +1,7 @@
 venv
-.idea
+
+# IDE specific files
+.idea/
+
+# Temporary cache
+__pycache__
