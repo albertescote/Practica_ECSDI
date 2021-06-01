@@ -268,36 +268,46 @@ def infoHoteles(gm, msgdic):
     roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
     adults = gm.value(subject= busqueda, predicate= myns_par.adults)
     radius = gm.value(subject= busqueda, predicate= myns_par.radius)
-                      
-    #response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino), 
-    #                                           checkInDate=str(dataIda), 
-    #                                            checkOutDate=str(dataVuelta),
-    #                                            roomQuantity=int(roomQuantity),
-    #                                            adults=int(adults),
-    #                                            radius=int(radius),
-    #                                            ratings=int(estrellas),
-    #                                            priceRange=str(precioHotel),
-    #                                            currency='EUR'
-    #                                            )
-    response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadIATA))
-            
+
     gr = Graph()
-    gr.bind('myns_hot', myns_hot)
+    try:                  
+        #response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino), 
+        #                                           checkInDate=str(dataIda), 
+        #                                            checkOutDate=str(dataVuelta),
+        #                                            roomQuantity=int(roomQuantity),
+        #                                            adults=int(adults),
+        #                                            radius=int(radius),
+        #                                            ratings=int(estrellas),
+        #                                            priceRange=str(precioHotel),
+        #                                            currency='EUR'
+        #                                            )
+        response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadIATA))
+                
+        
+        gr.bind('myns_hot', myns_hot)
 
-    for h in response.data:
-        hotel = h['hotel']['hotelId']
-        hotel_obj = myns_hot[hotel]
-        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-        gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
+        for h in response.data:
+            hotel = h['hotel']['hotelId']
+            hotel_obj = myns_hot[hotel]
+            gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+            gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
 
-        # Aqui realizariamos lo que pide la accion
-        # Por ahora simplemente retornamos un Inform-done
+            # Aqui realizariamos lo que pide la accion
+            # Por ahora simplemente retornamos un Inform-done
+            gr = build_message(gr,
+                            ACL['confirm'],
+                            sender=InfoAmadeus.uri,
+                            msgcnt=mss_cnt,
+                            receiver=msgdic['sender'], )
+    except:
+        logger.info('Parameters not correct')
         gr = build_message(gr,
-                        ACL['confirm'],
-                        sender=InfoAmadeus.uri,
-                        msgcnt=mss_cnt,
-                        receiver=msgdic['sender'], )
-    return gr
+                            ACL['failure'],
+                            sender=InfoAmadeus.uri,
+                            msgcnt=mss_cnt,
+                            receiver=msgdic['sender'], )
+    finally:
+        return gr
 
 
 if __name__ == '__main__':

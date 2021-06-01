@@ -1,4 +1,9 @@
 IATA= {
         'Barcelona' : 'BCN',
-        'Paris' : 'PAR'
+        'Paris' : 'PAR',
+        'Amsterdam' : 'AMS',
+        'Berlin' :  'BER',
+        'Dubai' : 'DXB',
+        'London' : 'LHR',
+        'Rome' : 'FCO'
     }

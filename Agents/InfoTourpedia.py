@@ -270,31 +270,40 @@ def infoHoteles(gm, msgdic):
 
 
     # Obtenemos un atracciones en Bercelona que tengan Museu en el nombre
-    response = requests.get(TOURPEDIA_END_POINT+ 'getPlaces',
-                 params={'location': ciudadDestino, 'category': 'attraction', 'name': 'Hotel'})
-
-    hoteles = response.json()
-    
-            
     gr = Graph()
-    gr.bind('myns_hot', myns_hot)
+    try:
+        response = requests.get(TOURPEDIA_END_POINT+ 'getPlaces',
+                    params={'location': ciudadDestino, 'category': 'accommodation'})
 
-    for h in hoteles:
-        hotel = h['id']
-        r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
-        detalles_hotel = r.json()
-        hotel_obj = myns_hot[hotel]
-        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-        gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_hotel['name'])))
+        hoteles = response.json()
+        
+                
+        gr.bind('myns_hot', myns_hot)
 
-        # Aqui realizariamos lo que pide la accion
-        # Por ahora simplemente retornamos un Inform-done
+        for h in hoteles:
+            hotel = h['id']
+            r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
+            detalles_hotel = r.json()
+            hotel_obj = myns_hot[hotel]
+            gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+            gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_hotel['name'])))
+
+            # Aqui realizariamos lo que pide la accion
+            # Por ahora simplemente retornamos un Inform-done
+            gr = build_message(gr,
+                            ACL['confirm'],
+                            sender=InfoTourpedia.uri,
+                            msgcnt=mss_cnt,
+                            receiver=msgdic['sender'], )
+    except:
+        logger.info('Location not found on database')
         gr = build_message(gr,
-                        ACL['confirm'],
-                        sender=InfoTourpedia.uri,
-                        msgcnt=mss_cnt,
-                        receiver=msgdic['sender'], )
-    return gr
+                            ACL['failure'],
+                            sender=InfoTourpedia.uri,
+                            msgcnt=mss_cnt,
+                            receiver=msgdic['sender'], )
+    finally:
+        return gr
 
 
 if __name__ == '__main__':

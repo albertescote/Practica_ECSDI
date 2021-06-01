@@ -15,6 +15,7 @@ Asume que el agente de registro esta en el puerto 9000
 """
 
 from multiprocessing import Process, Queue
+import re
 import socket
 import logging
 import argparse
@@ -118,10 +119,9 @@ def main():
 
 @app.route("/", methods=['POST'])
 def peticionPlan():
+
     ciudadOrigen = request.form['ciudadOrigen']
     ciudadDestino = request.form['ciudadDestino']
-    ciudadIATA_origen = convertirIATA(ciudadOrigen)
-    ciudadIATA_destino = convertirIATA(ciudadDestino)
     dataIda = request.form['dataIda']
     dataVuelta = request.form['dataVuelta']
     precioHotel = request.form['precioHotel']
@@ -130,25 +130,39 @@ def peticionPlan():
     adults = request.form['adults']
     radius = request.form['radius']
     
-    nombre=''
-    gm = pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
-    for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
-        nombre = gm.value(subject=s, predicate=myns_atr.nombre)
+    try:
+        errorMessage = ''
+        ciudadIATA_origen = convertirIATA(ciudadOrigen)
+        ciudadIATA_destino = convertirIATA(ciudadDestino)
+        nombre=''
+        gm = pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
+        
+        msgdic = get_message_properties(gm)
+        perf = msgdic['performative']
+        if(perf== ACL.failure):
+            hotelData = {
+            'error': 1,
+            'errorMessage': 'Parametros de entrada no válidos'
+        }
+        else:
+            for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
+                nombre = gm.value(subject=s, predicate=myns_atr.nombre)
 
-    hotelData= {
-        'ciudadOrigen' : ciudadOrigen,
-        'ciudadDestino' : ciudadDestino,
-        'dataIda' : dataIda,
-        'dataVuelta' : dataVuelta,
-        'precioHotel' : precioHotel,
-        'estrellas' : estrellas,
-        'roomQuantity': roomQuantity,
-        'adults': adults,
-        'radius': radius,
-        'nombreHotel': nombre
-    }
-
-    return render_template('processingPlan.html', hotelData=hotelData)
+            hotelData= {
+                'ciudadOrigen' : ciudadOrigen,
+                'ciudadDestino' : ciudadDestino,
+                'dataIda' : dataIda,
+                'dataVuelta' : dataVuelta,
+                'nombreHotel': nombre,
+                'error': 0
+            }
+    except:
+        hotelData = {
+            'error': 1,
+            'errorMessage': 'Error de conexión entre agentes'
+        }
+    finally:
+        return render_template('processingPlan.html', hotelData=hotelData)
 
 
 @app.route("/comm")
@@ -233,7 +247,12 @@ def pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataV
     return gr
 
 def convertirIATA(ciudad):
-    return IATA[str(ciudad)]
+    try:
+        codigo = IATA[str(ciudad)]
+    except:
+        codigo = ''
+    finally:
+        return codigo
 
 
 if __name__ == '__main__':

@@ -257,9 +257,12 @@ def resolverPlan(addr, ragn_uri, gm):
     roomQuantity = gm.value(subject= peticion, predicate= myns_atr.roomQuantity)
     adults = gm.value(subject= peticion, predicate= myns_atr.adults)
     radius = gm.value(subject= peticion, predicate= myns_atr.radius)
-            
-    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA_destino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
-                        ACL['confirm'],
+
+    gres = getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA_destino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
+    msgdic = get_message_properties(gres)
+    perf = msgdic['performative'] 
+    gr = build_message(gres,
+                        perf,
                         sender=AgenteAlojamiento.uri,
                         msgcnt=mss_cnt,
                         receiver=ragn_uri, 
