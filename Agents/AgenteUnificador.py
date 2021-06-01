@@ -144,6 +144,11 @@ def peticionPlan():
             'error': 1,
             'errorMessage': 'Parametros de entrada no válidos'
         }
+        elif(perf== ACL.cancel):
+            hotelData = {
+            'error': 1,
+            'errorMessage': 'Ningún agente de información encontrado'
+        }
         else:
             for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
                 nombre = gm.value(subject=s, predicate=myns_atr.nombre)

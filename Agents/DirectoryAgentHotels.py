@@ -192,7 +192,11 @@ def register():
                 gr = process_register()
             # Accion de busqueda
             elif accion == DSO.Search:
-                gr = process_search()
+                try:
+                    gr = process_search()
+                except:
+                    logger.info('Ningún agente encontrado')
+                    gr = build_message(Graph(), ACL['cancel'], sender=DirectoryAgent.uri, msgcnt=mss_cnt)
             # No habia ninguna accion en el mensaje
             else:
                 gr = build_message(Graph(),

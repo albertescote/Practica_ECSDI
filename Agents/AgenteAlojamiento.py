@@ -171,7 +171,18 @@ def comunicacion():
                 ragn_addr = gmess.value(subject=content, predicate=DSO.Address)
                 ragn_uri = gmess.value(subject=content, predicate=DSO.Uri)
 
-                gr = resolverPlan(ragn_addr, ragn_uri, gm)
+                msgdic = get_message_properties(gmess)
+                perf = msgdic['performative']
+
+                if(perf== ACL.cancel):
+                    gr = build_message(Graph(),
+                        perf,
+                        sender=AgenteAlojamiento.uri,
+                        msgcnt=mss_cnt,
+                        receiver=ragn_uri, 
+                    )
+                else:
+                    gr = resolverPlan(ragn_addr, ragn_uri, gm)
             else:
                 gr = build_message(Graph(),
                                    ACL['not-understood'],

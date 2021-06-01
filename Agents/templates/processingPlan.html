@@ -10,13 +10,13 @@
     <div align="center">
         <h1> Datos del viaje </h1>
 		    <!-- INFORMACION DE LOS HOTELES --> 
-        <h3> Hoteles</h3>
         <div>
           {% if hotelData.error == 0 %}
             <p> Ciudad origen: {{  hotelData.ciudadOrigen }} </p>
             <p> Ciudad destino: {{  hotelData.ciudadDestino }} </p>
             <p> Data ida: {{  hotelData.dataIda }} </p>
             <p> Data vuelta: {{  hotelData.dataVuelta }} </p>
+            <h3> Hotel</h3>
             <p> Nombre hotel: {{  hotelData.nombreHotel }} </p>
           {% else %}
             <p> {{ hotelData.errorMessage }} </p>
