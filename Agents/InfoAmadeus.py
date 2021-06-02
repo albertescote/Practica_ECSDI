@@ -30,6 +30,7 @@ from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
+from AgentUtil.Coordenadas import COORDENADAS
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
@@ -95,6 +96,7 @@ myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
 myns_par = Namespace("http://my.namespace.org/parametros/")
 myns_hot = Namespace("http://my.namespace.org/hoteles/")
+myns_act = Namespace("http://my.namespace.org/actividades/")
 
 # Contador de mensajes
 mss_cnt = 0
@@ -208,9 +210,12 @@ def comunicacion():
             if 'content' in msgdic:
                 content = msgdic['content']
                 accion = gm.value(subject=content, predicate=RDF.type)
+                agent = gm.value(subject=content, predicate=DSO.AgentType)
 
-            if accion == DSO.InfoAgent:
+            if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
                 gr = infoHoteles(gm, msgdic)
+            elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
+                gr = infoActividades(gm, msgdic)
             else:
                 gr = build_message(Graph(),
                                    ACL['not-understood'],
@@ -305,6 +310,40 @@ def infoHoteles(gm, msgdic):
     finally:
         return gr
 
+def infoActividades(gm, msgdic):
+    busqueda = myns_pet["ConsultarOpcionesActividades"]
+
+    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
+    ciudadIATA = gm.value(subject= busqueda, predicate= myns_par.ciudadIATA)
+    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
+    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
+    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
+    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
+    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
+    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
+    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
+                      
+    response = amadeus.shopping.activities.get(latitude=COORDENADAS[str(ciudadIATA)]['latitude'],
+                                               longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
+                                               radius=2)
+            
+    
+    gr = Graph()
+    gr.bind('myns_act', myns_act)
+
+    for activity in response.data:
+        activity_obj = myns_act[activity['id']]
+        gr.add((activity_obj, myns_atr.esUn, myns.activity))
+        gr.add((activity_obj, myns_atr.nombre, Literal(activity['name'])))
+
+        # Aqui realizariamos lo que pide la accion
+        # Por ahora simplemente retornamos un Inform-done
+        gr = build_message(gr,
+                        ACL['confirm'],
+                        sender=InfoAmadeus.uri,
+                        msgcnt=mss_cnt,
+                        receiver=msgdic['sender'], )
+    return gr
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
