@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>ECSDI</title>
+  </head>
+	<body>
+    <div align="center">
+        <h1> Datos del viaje </h1>
+		    <!-- INFORMACION DE LOS HOTELES --> 
+        <div>
+          {% if hotelData.error == 0 %}
+            <p> Ciudad origen: {{  hotelData.ciudadOrigen }} </p>
+            <p> Ciudad destino: {{  hotelData.ciudadDestino }} </p>
+            <p> Data ida: {{  hotelData.dataIda }} </p>
+            <p> Data vuelta: {{  hotelData.dataVuelta }} </p>
+            <h3> Hotel</h3>
+            <p> Nombre hotel: {{  hotelData.nombreHotel }} </p>
+            <p> Dirección hotel: {{  hotelData.direccion }} </p>
+          {% else %}
+            <p> {{ hotelData.errorMessage }} </p>
+          {% endif %}
+        </div>
+      </div>
+	</body>
+</html>
