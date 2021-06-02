@@ -30,9 +30,9 @@ import socket
 parser = argparse.ArgumentParser()
 parser.add_argument("--open", help="Define si el servidor está abierto al exterior o no.", action="store_true",
                     default=False)
+parser.add_argument("--port", type=int, help="Puerto de comunicación del agente.")
 parser.add_argument("--verbose", help="Genera un log de la comunicación del servidor web.", action="store_true",
                     default=False)
-parser.add_argument("--port", type=int, help="Puerto de comunicación del agente.")
 
 # Logging
 logger = config_logger(level=1)
@@ -41,18 +41,30 @@ logger = config_logger(level=1)
 args = parser.parse_args()
 
 # Configuración
-if args.port is None:
-    port = 9000
-else:
-    port = args.port
-
 if args.open:
     hostname = "0.0.0.0"
     hostaddr = gethostname()
 else:
     hostaddr = hostname = socket.gethostname()
 
-# Directory Service Graph
+if args.port is None:
+    port = 9000
+else:
+    port = args.port
+
+if not args.verbose:
+    log = logging.getLogger("werkzeug")
+    log.setLevel(logging.ERROR)
+
+agn = Namespace("http://www.agentes.org#")
+
+# Datos del agente
+DirectoryAgent = Agent("DirectoryAgent",
+                       agn.Directory,
+                       "http://%s:%d/Register" % (hostaddr, port),
+                       "http://%s:%d/Stop" % (hostaddr, port))
+
+# Grafo de estado del agente (Directory Service Graph)
 dsgraph = Graph()
 
 # Vinculamos todos los espacios de nombres a utilizar
@@ -62,21 +74,14 @@ dsgraph.bind('rdfs', RDFS)
 dsgraph.bind('foaf', FOAF)
 dsgraph.bind("dso", DSO)
 
-agn = Namespace("http://www.agentes.org#")
-DirectoryAgent = Agent("DirectoryAgent",
-                       agn.Directory,
-                       "http://%s:%d/Register" % (hostaddr, port),
-                       "http://%s:%d/Stop" % (hostaddr, port))
-
+# Iniciamos el servidor Flask
 app = Flask(__name__)
 
-if not args.verbose:
-    log = logging.getLogger("werkzeug")
-    log.setLevel(logging.ERROR)
+# Contador de mensajes
+mss_cnt = 0
 
-mss_cnt = 0  # Message count
-
-queue1 = Queue()  # Cola de comunicación entre procesos
+# Cola de comunicación entre procesos
+queue1 = Queue()
 
 
 # ENTRY POINTS
