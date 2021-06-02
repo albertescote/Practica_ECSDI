@@ -58,6 +58,7 @@ else:
 print('DS Hostname =', hostaddr)
 print('DS Port = ', port)
 
+
 # Directory Service Graph
 dsgraph = Graph()
 
@@ -82,7 +83,6 @@ if not args.verbose:
 mss_cnt = 0
 
 cola1 = Queue()  # Cola de comunicacion entre procesos
-
 
 @app.route("/Register")
 def register():
@@ -232,8 +232,9 @@ def tidyup():
     """
     Acciones previas a parar el agente
     """
-    global cola1
-    cola1.put(0)
+    #global cola1
+    #cola1.put(0)
+    pass
 
 
 def agentbehavior1():
@@ -246,11 +247,11 @@ def agentbehavior1():
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviours como procesos
-    ab1 = Process(target=agentbehavior1)
-    ab1.start()
+    #ab1 = Process(target=agentbehavior1)
+    #ab1.start()
 
     # Ponemos en marcha el servidor Flask
-    app.run(host=hostname, port=port, debug=True)
+    app.run(host=hostname, port=port)
 
-    ab1.join()
+    #ab1.join()
     logger.info('The End')

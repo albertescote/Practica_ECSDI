@@ -73,6 +73,7 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 print('Hostname =', hostaddr)
+print('DS Port = ', port)
 
 if args.dport is None:
     dport = 9000
@@ -106,8 +107,6 @@ InfoAmadeus = Agent('InfoAmadeus',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
-print("DS hostname: ", dhostname)
-print("DS port: ", dport)
 # Directory agent address
 DirectoryAgent = Agent('DirectoryAgent',
                        agn.Directory,
@@ -182,8 +181,6 @@ def comunicacion():
     global dsgraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
-
     # Extraemos el mensaje y creamos un grafo con el
     message = request.args['content']
     gm = Graph()
@@ -213,8 +210,10 @@ def comunicacion():
                 agent = gm.value(subject=content, predicate=DSO.AgentType)
 
             if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
+                logger.info('Peticion de alojamiento recibida')
                 gr = infoHoteles(gm, msgdic)
             elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
+                logger.info('Peticion de actividades recibida')
                 gr = infoActividades(gm, msgdic)
             else:
                 gr = build_message(Graph(),
@@ -254,8 +253,10 @@ def agentbehavior1():
     :return:
     """
     # Registramos el agente
-    gr = register_message()
-    pass
+    try:
+        gr = register_message()
+    except:
+        logger.info("DirectoryAgent no localizado")
 
 def infoHoteles(gm, msgdic):
     busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
@@ -287,15 +288,17 @@ def infoHoteles(gm, msgdic):
         
         gr.bind('myns_hot', myns_hot)
 
-        for h in response.data:
-            hotel = h['hotel']['hotelId']
-            hotel_obj = myns_hot[hotel]
-            gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-            gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
+        h = response.data[0]
+        hotel = h['hotel']['hotelId']
+        address = h['hotel']['address']['lines'][0] + ', ' + h['hotel']['address']['cityName'] + ', ' + h['hotel']['address']['postalCode']
+        hotel_obj = myns_hot[hotel]
+        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+        gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
+        gr.add((hotel_obj, myns_atr.direccion, Literal(address)))
 
-            # Aqui realizariamos lo que pide la accion
-            # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(gr,
+        # Aqui realizariamos lo que pide la accion
+        # Por ahora simplemente retornamos un Inform-done
+        gr = build_message(gr,
                             ACL['confirm'],
                             sender=InfoAmadeus.uri,
                             msgcnt=mss_cnt,

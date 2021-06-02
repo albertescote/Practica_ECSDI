@@ -63,6 +63,7 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 print('DS Hostname =', hostaddr)
+print('DS Port = ', port)
 
 if args.dport is None:
     dport = 9000

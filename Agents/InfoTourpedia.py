@@ -74,6 +74,7 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 print('Hostname =', hostaddr)
+print('DS Port = ', port)
 
 if args.dport is None:
     dport = 9000
@@ -106,8 +107,6 @@ InfoTourpedia = Agent('InfoTourpedia',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
-print("DS hostname: ", dhostname)
-print("DS port: ", dport)
 # Directory agent address
 DirectoryAgent = Agent('DirectoryAgent',
                        agn.Directory,
@@ -182,7 +181,6 @@ def comunicacion():
     global dsgraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
 
     # Extraemos el mensaje y creamos un grafo con el
     message = request.args['content']
@@ -213,8 +211,10 @@ def comunicacion():
                 agent = gm.value(subject=content, predicate=DSO.AgentType)
 
             if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
+                logger.info('Peticion de alojamiento recibida')
                 gr = infoHoteles(gm, msgdic)
             elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
+                logger.info('Peticion de actividades recibida')
                 gr = infoActividades(gm, msgdic)
 
             else:

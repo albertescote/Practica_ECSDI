@@ -14,8 +14,6 @@ Asume que el agente de registro esta en el puerto 9000
 @author: javier
 """
 
-from Agents.InfoAmadeus import InfoAmadeus
-from Agents.AgenteUnificador import AgenteActividades
 from multiprocessing import Process, Queue
 import socket
 import logging
@@ -65,6 +63,7 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 print('DS Hostname =', hostaddr)
+print('DS Port = ', port)
 
 if args.dport is None:
     dport = 9000
