@@ -17,7 +17,7 @@ Asume que el agente de registro esta en el puerto 9000
 from amadeus import Client, ResponseError
 from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
 
-from multiprocessing import Process, Queue
+from multiprocessing import Array, Process, Queue
 import socket
 import logging
 import argparse
@@ -273,18 +273,15 @@ def infoHoteles(gm, msgdic):
 
     gr = Graph()
     try:                  
-        #response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino), 
-        #                                           checkInDate=str(dataIda), 
-        #                                            checkOutDate=str(dataVuelta),
-        #                                            roomQuantity=int(roomQuantity),
-        #                                            adults=int(adults),
-        #                                            radius=int(radius),
-        #                                            ratings=int(estrellas),
-        #                                            priceRange=str(precioHotel),
-        #                                            currency='EUR'
-        #                                            )
-        response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadIATA))
-                
+        response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadIATA), 
+                                                    roomQuantity=int(roomQuantity),
+                                                    adults=int(adults),
+                                                    radius=int(radius),
+                                                    ratings=int(estrellas),
+                                                    priceRange=precioHotel,
+                                                    currency='EUR',
+                                                    view='LIGHT',
+                                                    )            
         
         gr.bind('myns_hot', myns_hot)
 
