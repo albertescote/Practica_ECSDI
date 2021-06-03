@@ -70,11 +70,11 @@ dsgraph = Graph()
 # Vinculamos todos los espacios de nombres a utilizar
 dsgraph.bind("acl", ACL)
 dsgraph.bind("rdf", RDF)
-dsgraph.bind('rdfs', RDFS)
-dsgraph.bind('foaf', FOAF)
+dsgraph.bind("rdfs", RDFS)
+dsgraph.bind("foaf", FOAF)
 dsgraph.bind("dso", DSO)
 
-# Iniciamos el servidor Flask
+# Instanciamos el servidor Flask
 app = Flask(__name__)
 
 # Contador de mensajes
@@ -135,7 +135,7 @@ def register():
 
             res_graph = Graph()
             res_graph.bind("dso", DSO)
-            res_obj = agn["Directory-response"]
+            res_obj = agn["Directory-Response"]
             res_graph.add((res_obj, DSO.Address, agn_add))
             res_graph.add((res_obj, DSO.Uri, agn_uri))
 
@@ -143,9 +143,9 @@ def register():
             return build_message(res_graph,
                                  ACL.inform,
                                  sender=DirectoryAgent.uri,
-                                 msgcnt=mss_cnt,
                                  receiver=agn_uri,
-                                 content=res_obj)
+                                 content=res_obj,
+                                 msgcnt=mss_cnt)
         else:
             # Si no encontramos nada retornamos un mensaje de respuesta, de tipo 'inform', sin contenido
             return build_message(Graph(),
@@ -252,7 +252,7 @@ if __name__ == "__main__":
     ab1.start()
 
     # Ponemos en marcha el servidor Flask
-    app.run(host=hostname, port=port, debug=True)
+    app.run(host=hostname, port=port)
 
     # Espera hasta que el proceso hijo termine
     ab1.join()
