@@ -1,7 +1,10 @@
 venv
 
-# IDE specific files
+# Ficheros específicos del IDE
 .idea/
 
-# Temporary cache
+# Cache temporal
 __pycache__
+
+# Credenciales de acceso a las API
+APIKeys.py
