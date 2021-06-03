@@ -3,7 +3,6 @@
 Agente de información de transportes. Se registra en el directorio de agentes como ello.
 """
 
-
 from multiprocessing import Process, Queue
 import logging
 import argparse
@@ -20,6 +19,11 @@ from AgentUtil.Logging import config_logger
 from AgentUtil.DSO import DSO
 from AgentUtil.Util import gethostname
 import socket
+
+from amadeus import Client, ResponseError
+from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
+from AgentUtil.IATACodes import IATA
+from pprint import PrettyPrinter
 
 # Definimos los parámetros de la linea de comandos
 parser = argparse.ArgumentParser()
@@ -127,12 +131,7 @@ def comunication():
                                   sender=InfoAgent.uri,
                                   msgcnt=mss_cnt)
     else:
-        # TODO
-        res_graph = build_message(Graph(),
-                                  ACL['inform'],
-                                  sender=InfoAgent.uri,
-                                  receiver=msgdic['sender'],
-                                  msgcnt=mss_cnt)
+        res_graph = get_flights(msg_graph, msgdic)
 
     mss_cnt += 1
 
@@ -167,6 +166,78 @@ def tidyup():
     queue1.put(0)
 
 
+def get_flights(msg_graph, msgdic):
+    """
+    Retorna un mensaje en formato FIPA-ACL, de tipo 'inform', que contiene el resultado de la búsqueda de vuelos hecha
+    en la API Amadeus con los criterio de búsqueda que hay en el grafo msg_graph, pasado como parámetro. En caso de
+    producirse un error, la función retorna un mensaje FIPA-ACL de tipo 'failure'.
+    """
+    res_graph = Graph()
+
+    # Extraemos los campos de búsqueda del contenido del mensaje, una vez que este está expresado como un grafo
+    search_req = agn["GestorTransporte-InfoSearch"]
+    originLocationName = msg_graph.value(subject=search_req, predicate=agn.originCity)
+    originLocationCode = IATA[str(originLocationName)]
+    destinationLocationName = msg_graph.value(subject=search_req, predicate=agn.destinationCity)
+    destinationLocationCode = IATA[str(destinationLocationName)]
+    departureDate = msg_graph.value(subject=search_req, predicate=agn.departureDate)
+    budget = msg_graph.value(subject=search_req, predicate=agn.budget)
+
+    amadeus = Client(
+        client_id=AMADEUS_KEY,
+        client_secret=AMADEUS_SECRET
+    )
+
+    try:
+        # Hace la búsqueda a la API Amadeus a través de su librería y guarda el resultado en formato JSON (accesible
+        # como si fuera un diccionario Python)
+        response = amadeus.shopping.flight_offers_search.get(
+            originLocationCode=originLocationCode,
+            destinationLocationCode=destinationLocationCode,
+            departureDate=departureDate,
+            adults=1)
+
+        for ticket in response.data:
+            # La librería de Amadeus no deja filtrar por presupuesto directamente, así que lo hacemos manualmente
+            # una vez obtenemos los resultados
+            if float(ticket["price"]["total"]) <= float(budget):
+                # Extrae los campos que nos interesan de la respuesta dada por la API.
+                #
+                # Para determinar la fecha de salida y la fecha de llegada solo consideramos el primer segmento del
+                # vuelo, en el caso de un vuelo con escalas. Solo consideramos una tipo (clase) de billete, en el
+                # caso que haya más de uno.
+                ticketId = int(ticket["id"])
+                departureDate = ticket["itineraries"][0]["segments"][0]["departure"]["at"]
+                arrivalDate = ticket["itineraries"][0]["segments"][0]["arrival"]["at"]
+                ticketClass = ticket["travelerPricings"][0]["fareOption"]
+                ticketPrice = float(ticket["price"]["total"])
+
+                # Construye el grafo que enviaremos como respuesta al agente
+                ticket_obj = agn["Billete" + str(ticketId)]
+                res_graph.add((ticket_obj, agn.Id, Literal(ticketId)))
+                res_graph.add((ticket_obj, agn.Asiento, Literal("A23")))  # Asiento inventado
+                res_graph.add((ticket_obj, agn.DiaHoraSalida, Literal(departureDate)))
+                res_graph.add((ticket_obj, agn.DiaHoraLlegada, Literal(arrivalDate)))
+                res_graph.add((ticket_obj, agn.Clase, Literal(ticketClass)))
+                res_graph.add((ticket_obj, agn.Precio, Literal(ticketPrice)))
+
+                res_graph = build_message(res_graph,
+                                          ACL["inform"],
+                                          sender=InfoAgent.uri,
+                                          receiver=msgdic['sender'],
+                                          msgcnt=mss_cnt)
+
+    except ResponseError as error:
+        logger.info(error)
+        res_graph = build_message(res_graph,
+                                  ACL["failure"],
+                                  sender=InfoAgent.uri,
+                                  receiver=msgdic['sender'],
+                                  msgcnt=mss_cnt)
+    finally:
+        return res_graph
+
+
 def register_message():
     """
     Envia un mensaje de registro al servicio de registro usando una performativa 'Request' con
@@ -189,7 +260,7 @@ def register_message():
     msg_graph.add((reg_obj, DSO.Uri, InfoAgent.uri))
     msg_graph.add((reg_obj, FOAF.name, Literal(InfoAgent.name)))
     msg_graph.add((reg_obj, DSO.Address, Literal(InfoAgent.address)))
-    msg_graph.add((reg_obj, DSO.AgentType, DSO.FlightsAgent))  # TODO: Ontología a RDFlib
+    msg_graph.add((reg_obj, DSO.AgentType, DSO.FlightsAgent))
 
     res_graph = send_message(
         build_message(msg_graph,

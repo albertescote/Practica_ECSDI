@@ -4,13 +4,12 @@ Agente que busca en el directorio un agente de información de transportes y, un
 una petición de búsqueda de transporte (con sus respectivas restricciones).
 """
 
-
 from multiprocessing import Process, Queue
 import logging
 import argparse
 
 from flask import Flask, render_template, request
-from rdflib import Graph, Namespace
+from rdflib import Graph, Namespace, Literal
 from rdflib.namespace import FOAF, RDF
 
 from AgentUtil.ACL import ACL
@@ -144,7 +143,7 @@ def directory_search(agent_type):
     msg_graph.bind("dso", DSO)
 
     # Construimos el mensaje de búsqueda
-    obj = agn[GestorTransporte.name + "-Search"]
+    obj = agn["GestorTransporte-Search"]
     msg_graph.add((obj, RDF.type, DSO.Search))
     msg_graph.add((obj, DSO.AgentType, agent_type))
 
@@ -169,7 +168,7 @@ def infoagent_search(agn_addr, agn_uri):
     """
     global mss_cnt
 
-    logger.info("Hacemos una petición al servicio de información de vuelos")
+    logger.info("Hacemos una petición al servicio de información de vuelos.")
 
     msg_graph = Graph()
 
@@ -178,17 +177,21 @@ def infoagent_search(agn_addr, agn_uri):
 
     # Vinculamos los espacios de nombres que usaremos para construir el mensaje de petición
     msg_graph.bind("rdf", RDF)
-    msg_graph.bind("dso", DSO)
     msg_graph.bind("iaa", IAA)
 
     # Construimos el mensaje de petición
-    obj = agn[GestorTransporte.name + "InfoSearch"]
-    msg_graph.add((obj, RDF.type, IAA.Search))
+    search_req = agn["GestorTransporte-InfoSearch"]
+    msg_graph.add((search_req, RDF.type, IAA.SearchFlights))
+    msg_graph.add((search_req, agn.originCity, Literal("Paris")))
+    msg_graph.add((search_req, agn.destinationCity, Literal("Barcelona")))
+    msg_graph.add((search_req, agn.departureDate, Literal("2021-06-21")))
+    msg_graph.add((search_req, agn.budget, Literal("250")))
 
     res_graph = send_message(build_message(msg_graph,
                                            ACL.request,
                                            sender=GestorTransporte.uri,
                                            receiver=agn_uri,
+                                           content=search_req,
                                            msgcnt=mss_cnt), agn_addr)
 
     mss_cnt += 1
