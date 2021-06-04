@@ -215,9 +215,11 @@ def get_flights(msg_graph, msgdic):
                 # Construye el grafo que enviaremos como respuesta al agente
                 ticket_obj = agn["Billete" + str(ticketId)]
                 res_graph.add((ticket_obj, agn.Id, Literal(ticketId)))
-                res_graph.add((ticket_obj, agn.Asiento, Literal("A23")))  # Asiento inventado
+                res_graph.add((ticket_obj, agn.origenBillete, Literal(originLocationName)))
+                res_graph.add((ticket_obj, agn.destinoBillete, Literal(destinationLocationName)))
                 res_graph.add((ticket_obj, agn.DiaHoraSalida, Literal(departureDate)))
                 res_graph.add((ticket_obj, agn.DiaHoraLlegada, Literal(arrivalDate)))
+                res_graph.add((ticket_obj, agn.Asiento, Literal("A23")))  # Asiento inventado
                 res_graph.add((ticket_obj, agn.Clase, Literal(ticketClass)))
                 res_graph.add((ticket_obj, agn.Precio, Literal(ticketPrice)))
 
