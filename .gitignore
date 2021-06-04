@@ -1,4 +1,11 @@
 venv
-.idea
+
+# Ficheros específicos de los IDE
+.idea/
 .vscode
+
+# Cache temporal
 __pycache__
+
+# Credenciales de acceso a las API
+APIKeys.py
