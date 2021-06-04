@@ -22,7 +22,7 @@ import socket
 
 from amadeus import Client, ResponseError
 from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
-from AgentUtil.IATACodes import IATA
+from AgentUtil.IATACodes import convert_to_IATA
 from pprint import PrettyPrinter
 
 # Definimos los parámetros de la linea de comandos
@@ -177,9 +177,9 @@ def get_flights(msg_graph, msgdic):
     # Extraemos los campos de búsqueda del contenido del mensaje, una vez que este está expresado como un grafo
     search_req = agn["GestorTransporte-InfoSearch"]
     originLocationName = msg_graph.value(subject=search_req, predicate=agn.originCity)
-    originLocationCode = IATA[str(originLocationName)]
+    originLocationCode = convert_to_IATA(str(originLocationName))
     destinationLocationName = msg_graph.value(subject=search_req, predicate=agn.destinationCity)
-    destinationLocationCode = IATA[str(destinationLocationName)]
+    destinationLocationCode = convert_to_IATA(str(destinationLocationName))
     departureDate = msg_graph.value(subject=search_req, predicate=agn.departureDate)
     budget = msg_graph.value(subject=search_req, predicate=agn.budget)
 
