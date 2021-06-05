@@ -136,6 +136,7 @@ def peticionPlan():
     roomQuantity = request.form['roomQuantity']
     adults = request.form['adults']
     radius = request.form['radius']
+    budget = request.form['budget']
     
     try:
         errorMessage = ''
@@ -147,19 +148,26 @@ def peticionPlan():
         return_dic = manager.dict()
         p1 = Process(target=pedirSeleccionAlojamiento, args=(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic))
         p2 = Process(target= pedirSeleccionActividades, args=(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic))
-        
+        p3 = Process(target= pedirSeleccionTransporte, args=(ciudadDestino, ciudadOrigen, adults, budget, return_dic))
         p1.start()
         p2.start()
+        p3.start()
 
         p1.join()
         p2.join()
+        p3.join()
 
         gAloj = return_dic['alojamiento']
         gAct = return_dic['actividades']
+        #gTra = return_dic['transporte']
+
         msgdicAlojamiento = get_message_properties(gAloj)
         msgdicActividad = get_message_properties(gAct)
+        #msgdicTransporte = get_message_properties(gTra)
         perfAlojamiento = msgdicAlojamiento['performative']
         perfActividad = msgdicActividad['performative']
+        #perfTransporte = msgdicTransporte['performative']
+
         if(perfAlojamiento == ACL.failure or perfActividad== ACL.failure):
             hotelData = {
             'error': 1,
@@ -237,6 +245,13 @@ def agentbehavior1(cola):
     """
     pass
 
+def pedirSeleccionTransporte(ciudadDestino, ciudadOrigen, adults, budget, return_dic):
+    logger.info('Iniciamos busqueda de Transporte')
+    gr = Graph()
+    logger.info('Transporte recibido')
+    return_dic['transporte'] =  gr
+
+
 def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic):
 
     global mss_cnt
@@ -275,7 +290,7 @@ def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, e
     
     mss_cnt += 1
 
-    logger.info('Alojamientos recibidos')
+    logger.info('Alojamiento recibido')
     
     return_dic['alojamiento'] =  gr
 
