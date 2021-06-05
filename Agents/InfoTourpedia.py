@@ -28,6 +28,7 @@ from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
 from flask import Flask , request
 
+from AgentUtil.AgentsPorts import PUERTO_INFO_TOURPEDIA, PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
@@ -63,7 +64,7 @@ args = parser.parse_args()
 
 # Configuration stuff
 if args.port is None:
-    port = 9004
+    port = PUERTO_INFO_TOURPEDIA
 else:
     port = args.port
 
@@ -74,9 +75,10 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 print('Hostname =', hostaddr)
+print('DS Port = ', port)
 
 if args.dport is None:
-    dport = 9000
+    dport = PUERTO_DIRECTORIO
 else:
     dport = args.dport
 
@@ -106,8 +108,6 @@ InfoTourpedia = Agent('InfoTourpedia',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
-print("DS hostname: ", dhostname)
-print("DS port: ", dport)
 # Directory agent address
 DirectoryAgent = Agent('DirectoryAgent',
                        agn.Directory,
@@ -182,7 +182,6 @@ def comunicacion():
     global dsgraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
 
     # Extraemos el mensaje y creamos un grafo con el
     message = request.args['content']
@@ -210,9 +209,15 @@ def comunicacion():
             if 'content' in msgdic:
                 content = msgdic['content']
                 accion = gm.value(subject=content, predicate=RDF.type)
+                agent = gm.value(subject=content, predicate=DSO.AgentType)
 
-            if accion == DSO.InfoAgent:
+            if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
+                logger.info('Peticion de alojamiento recibida')
                 gr = infoHoteles(gm, msgdic)
+            elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
+                logger.info('Peticion de actividades recibida')
+                gr = infoActividades(gm, msgdic)
+
             else:
                 gr = build_message(Graph(),
                                    ACL['not-understood'],
@@ -309,6 +314,48 @@ def infoHoteles(gm, msgdic):
                             receiver=msgdic['sender'], )
     finally:
         return gr
+
+
+def infoActividades(gm, msgdic):
+    busqueda = myns_pet["ConsultarOpcionesActividades"]
+
+    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
+    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
+    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
+    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
+    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
+    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
+    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
+    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
+
+
+    # Obtenemos un atracciones en Bercelona que tengan Museu en el nombre
+    response = requests.get(TOURPEDIA_END_POINT+ 'getPlaces',
+                 params={'location': ciudadDestino, 'category': 'attraction', 'name': 'Parc'})
+
+    hoteles = response.json()
+    
+            
+    gr = Graph()
+    gr.bind('myns_hot', myns_hot)
+
+    for h in hoteles:
+        hotel = h['id']
+        r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
+        detalles_actividad = r.json()
+        hotel_obj = myns_hot[hotel]
+        gr.add((hotel_obj, myns_atr.esUn, myns.activity))
+        gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_actividad['name'])))
+
+        # Aqui realizariamos lo que pide la accion
+        # Por ahora simplemente retornamos un Inform-done
+        gr = build_message(gr,
+                        ACL['confirm'],
+                        sender=InfoTourpedia.uri,
+                        msgcnt=mss_cnt,
+                        receiver=msgdic['sender'], )
+    return gr
+
 
 
 if __name__ == '__main__':

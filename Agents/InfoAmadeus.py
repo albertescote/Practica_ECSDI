@@ -17,19 +17,21 @@ Asume que el agente de registro esta en el puerto 9000
 from amadeus import Client, ResponseError
 from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
 
-from multiprocessing import Process, Queue
+from multiprocessing import Array, Process, Queue
 import socket
 import logging
 import argparse
 
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
-from flask import Flask , request, render_template  
+from flask import Flask , request, render_template
 
+from AgentUtil.AgentsPorts import PUERTO_INFO_AMADEUS, PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
+from AgentUtil.Coordenadas import COORDENADAS
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
@@ -61,7 +63,7 @@ args = parser.parse_args()
 
 # Configuration stuff
 if args.port is None:
-    port = 9003
+    port = PUERTO_INFO_AMADEUS
 else:
     port = args.port
 
@@ -72,9 +74,10 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 print('Hostname =', hostaddr)
+print('DS Port = ', port)
 
 if args.dport is None:
-    dport = 9000
+    dport = PUERTO_DIRECTORIO
 else:
     dport = args.dport
 
@@ -95,6 +98,7 @@ myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
 myns_par = Namespace("http://my.namespace.org/parametros/")
 myns_hot = Namespace("http://my.namespace.org/hoteles/")
+myns_act = Namespace("http://my.namespace.org/actividades/")
 
 # Contador de mensajes
 mss_cnt = 0
@@ -104,8 +108,6 @@ InfoAmadeus = Agent('InfoAmadeus',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
-print("DS hostname: ", dhostname)
-print("DS port: ", dport)
 # Directory agent address
 DirectoryAgent = Agent('DirectoryAgent',
                        agn.Directory,
@@ -180,8 +182,6 @@ def comunicacion():
     global dsgraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
-
     # Extraemos el mensaje y creamos un grafo con el
     message = request.args['content']
     gm = Graph()
@@ -208,9 +208,14 @@ def comunicacion():
             if 'content' in msgdic:
                 content = msgdic['content']
                 accion = gm.value(subject=content, predicate=RDF.type)
+                agent = gm.value(subject=content, predicate=DSO.AgentType)
 
-            if accion == DSO.InfoAgent:
+            if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
+                logger.info('Peticion de alojamiento recibida')
                 gr = infoHoteles(gm, msgdic)
+            elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
+                logger.info('Peticion de actividades recibida')
+                gr = infoActividades(gm, msgdic)
             else:
                 gr = build_message(Graph(),
                                    ACL['not-understood'],
@@ -249,8 +254,10 @@ def agentbehavior1():
     :return:
     """
     # Registramos el agente
-    gr = register_message()
-    pass
+    try:
+        gr = register_message()
+    except:
+        logger.info("DirectoryAgent no localizado")
 
 def infoHoteles(gm, msgdic):
     busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
@@ -267,30 +274,29 @@ def infoHoteles(gm, msgdic):
 
     gr = Graph()
     try:                  
-        #response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadDestino), 
-        #                                           checkInDate=str(dataIda), 
-        #                                            checkOutDate=str(dataVuelta),
-        #                                            roomQuantity=int(roomQuantity),
-        #                                            adults=int(adults),
-        #                                            radius=int(radius),
-        #                                            ratings=int(estrellas),
-        #                                            priceRange=str(precioHotel),
-        #                                            currency='EUR'
-        #                                            )
-        response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadIATA))
-                
+        response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadIATA), 
+                                                    roomQuantity=int(roomQuantity),
+                                                    adults=int(adults),
+                                                    radius=int(radius),
+                                                    ratings=int(estrellas),
+                                                    priceRange=precioHotel,
+                                                    currency='EUR',
+                                                    view='LIGHT',
+                                                    )            
         
         gr.bind('myns_hot', myns_hot)
 
-        for h in response.data:
-            hotel = h['hotel']['hotelId']
-            hotel_obj = myns_hot[hotel]
-            gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-            gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
+        h = response.data[0]
+        hotel = h['hotel']['hotelId']
+        address = h['hotel']['address']['lines'][0] + ', ' + h['hotel']['address']['cityName'] + ', ' + h['hotel']['address']['postalCode']
+        hotel_obj = myns_hot[hotel]
+        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
+        gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
+        gr.add((hotel_obj, myns_atr.direccion, Literal(address)))
 
-            # Aqui realizariamos lo que pide la accion
-            # Por ahora simplemente retornamos un Inform-done
-            gr = build_message(gr,
+        # Aqui realizariamos lo que pide la accion
+        # Por ahora simplemente retornamos un Inform-done
+        gr = build_message(gr,
                             ACL['confirm'],
                             sender=InfoAmadeus.uri,
                             msgcnt=mss_cnt,
@@ -305,6 +311,40 @@ def infoHoteles(gm, msgdic):
     finally:
         return gr
 
+def infoActividades(gm, msgdic):
+    busqueda = myns_pet["ConsultarOpcionesActividades"]
+
+    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
+    ciudadIATA = gm.value(subject= busqueda, predicate= myns_par.ciudadIATA)
+    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
+    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
+    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
+    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
+    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
+    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
+    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
+                      
+    response = amadeus.shopping.activities.get(latitude=COORDENADAS[str(ciudadIATA)]['latitude'],
+                                               longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
+                                               radius=2)
+            
+    
+    gr = Graph()
+    gr.bind('myns_act', myns_act)
+
+    for activity in response.data:
+        activity_obj = myns_act[activity['id']]
+        gr.add((activity_obj, myns_atr.esUn, myns.activity))
+        gr.add((activity_obj, myns_atr.nombre, Literal(activity['name'])))
+
+        # Aqui realizariamos lo que pide la accion
+        # Por ahora simplemente retornamos un Inform-done
+        gr = build_message(gr,
+                        ACL['confirm'],
+                        sender=InfoAmadeus.uri,
+                        msgcnt=mss_cnt,
+                        receiver=msgdic['sender'], )
+    return gr
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors

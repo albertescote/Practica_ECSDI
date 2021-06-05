@@ -23,8 +23,10 @@ import argparse
 
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
-from flask import Flask , request, render_template  
+from flask import Flask , request, render_template
 
+from AgentUtil.AgentsPorts import PUERTO_UNIFICADOR, PUERTO_DIRECTORIO, PUERTO_GESTOR_ALOJAMIENTO, \
+    PUERTO_GESTOR_ACTIVIDADES
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
@@ -54,7 +56,7 @@ args = parser.parse_args()
 
 # Configuration stuff
 if args.port is None:
-    port = 9001
+    port = PUERTO_UNIFICADOR
 else:
     port = args.port
 
@@ -65,9 +67,10 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 print('DS Hostname =', hostaddr)
+print('DS Port = ', port)
 
 if args.dport is None:
-    dport = 9000
+    dport = PUERTO_DIRECTORIO
 else:
     dport = args.dport
 
@@ -98,8 +101,13 @@ AgenteUnificador = Agent('AgenteUnificador',
 
 AgenteAlojamiento = Agent('AgenteAlojamiento',
                        agn.AgenteAlojamiento,
-                       'http://%s:%d/comm' % (hostaddr, 9002),
-                       'http://%s:%d/Stop' % (hostaddr, 9002))
+                       'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO),
+                       'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO))
+
+AgenteActividades = Agent('AgenteActividades',
+                       agn.AgenteActividades,
+                       'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES),
+                       'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES))
 
 
 # Global triplestore graph
@@ -136,24 +144,31 @@ def peticionPlan():
         ciudadIATA_destino = convertirIATA(ciudadDestino)
         nombre=''
         direccion=''
-        gm = pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
-        
-        msgdic = get_message_properties(gm)
-        perf = msgdic['performative']
-        if(perf== ACL.failure):
+        actividad=''
+        gmAlojamiento = pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
+        gmActividad = pedirSeleccionActividades(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
+            
+        msgdicAlojamiento = get_message_properties(gmAlojamiento)
+        msgdicActividad = get_message_properties(gmActividad)
+        perfAlojamiento = msgdicAlojamiento['performative']
+        perfActividad = msgdicActividad['performative']
+        if(perfAlojamiento == ACL.failure or perfActividad== ACL.failure):
             hotelData = {
             'error': 1,
             'errorMessage': 'Parametros de entrada no válidos'
         }
-        elif(perf== ACL.cancel):
+        elif(perfAlojamiento == ACL.cancel or perfActividad == ACL.cancel):
             hotelData = {
             'error': 1,
             'errorMessage': 'Ningún agente de información encontrado'
         }
         else:
-            for s,p,o in gm.triples((None, myns_atr.esUn, myns.hotel)):
-                nombre = gm.value(subject=s, predicate=myns_atr.nombre)
-                direccion = gm.value(subject=s, predicate=myns_atr.direccion)
+            for s,p,o in gmAlojamiento.triples((None, myns_atr.esUn, myns.hotel)):
+                nombre = gmAlojamiento.value(subject=s, predicate=myns_atr.nombre)
+                direccion = gmAlojamiento.value(subject=s, predicate=myns_atr.direccion)
+            
+            for s,p,o in gmActividad.triples((None, myns_atr.esUn, myns.activity)):
+                actividad = gmActividad.value(subject=s, predicate=myns_atr.nombre)
 
             hotelData= {
                 'ciudadOrigen' : ciudadOrigen,
@@ -162,6 +177,7 @@ def peticionPlan():
                 'dataVuelta' : dataVuelta,
                 'nombreHotel': nombre,
                 'direccion' : direccion,
+                'nombreActividad': actividad,
                 'error': 0
             }
     except:
@@ -251,6 +267,49 @@ def pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataV
     mss_cnt += 1
 
     logger.info('Alojamientos recibidos')
+    
+    return gr
+
+def pedirSeleccionActividades(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+
+    global mss_cnt
+    logger.info('Iniciamos busqueda de actividades')
+
+    gmess = Graph()
+    gmess.bind('myns_pet', myns_pet)
+    gmess.bind('myns_atr', myns_atr)
+
+    peticion = myns_pet["SolicitarSeleccionActividades"]
+
+    gmess.add((peticion, myns_atr.ciudadIATA_destino, Literal(ciudadIATA_destino)))
+    gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
+    gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
+    gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
+    gmess.add((peticion, myns_atr.precioHotel, Literal(precioHotel)))
+    gmess.add((peticion, myns_atr.estrellas, Literal(estrellas)))
+    gmess.add((peticion, myns_atr.roomQuantity, Literal(roomQuantity)))
+    gmess.add((peticion, myns_atr.adults, Literal(adults)))
+    gmess.add((peticion, myns_atr.radius, Literal(radius)))
+
+    
+    gmess.bind('foaf', FOAF)
+    gmess.bind('dso', DSO)
+    req_obj = agn[AgenteUnificador.name + '-SolverAgent']
+    gmess.add((req_obj, RDF.type, DSO.SolverAgent))
+    gmess.add((req_obj, DSO.AgentType, DSO.PersonalAgent))
+    
+
+    msg = build_message(gmess, perf=ACL.request,
+                      sender=AgenteUnificador.uri,
+                      receiver=AgenteActividades.uri,
+                      content=req_obj,
+                      msgcnt=mss_cnt)
+    
+    gr = send_message(msg, AgenteActividades.address)
+    
+    mss_cnt += 1
+
+    logger.info('Actividades recibidas')
     
     return gr
 
