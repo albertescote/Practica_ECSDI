@@ -63,9 +63,6 @@ if args.open:
 else:
     hostaddr = hostname = socket.gethostname()
 
-print('DS Hostname =', hostaddr)
-print('DS Port = ', port)
-
 if args.dport is None:
     dport = PUERTO_DIRECTORIO
 else:
@@ -90,8 +87,8 @@ myns_par = Namespace("http://my.namespace.org/parametros/")
 # Contador de mensajes
 mss_cnt = 0
 
-AgenteActividades = Agent('AgenteActividades',
-                       agn.AgenteActividades,
+GestorActividades = Agent('GestorActividades',
+                       agn.GestorActividades,
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
@@ -144,14 +141,14 @@ def comunicacion():
     # Comprobamos que sea un mensaje FIPA ACL
     if msgdic is None:
         # Si no es, respondemos que no hemos entendido el mensaje
-        gr = build_message(Graph(), ACL['not-understood'], sender=AgenteActividades.uri, msgcnt=mss_cnt)
+        gr = build_message(Graph(), ACL['not-understood'], sender=GestorActividades.uri, msgcnt=mss_cnt)
     else:
         # Obtenemos la performativa
         perf = msgdic['performative']
 
         if perf != ACL.request:
             # Si no es un request, respondemos que no hemos entendido el mensaje
-            gr = build_message(Graph(), ACL['not-understood'], sender=AgenteActividades.uri, msgcnt=mss_cnt)
+            gr = build_message(Graph(), ACL['not-understood'], sender=GestorActividades.uri, msgcnt=mss_cnt)
         else:
             # Extraemos el objeto del contenido que ha de ser una accion de la ontologia de acciones del agente
             # de registro
@@ -164,7 +161,7 @@ def comunicacion():
             if accion == DSO.SolverAgent:
                 # Buscamos en el directorio
                 # un agente de hoteles
-                gmess = directory_search_message(DSO.HotelsAgent)
+                gmess = directory_search_message(DSO.TravelServiceAgent)
 
                 # Obtenemos la direccion del agente de la respuesta
                 # No hacemos ninguna comprobacion sobre si es un mensaje valido
@@ -177,7 +174,7 @@ def comunicacion():
             else:
                 gr = build_message(Graph(),
                                    ACL['not-understood'],
-                                   sender=AgenteActividades.uri,
+                                   sender=GestorActividades.uri,
                                    msgcnt=mss_cnt)
             
             
@@ -223,12 +220,12 @@ def directory_search_message(type):
 
     gmess.bind('foaf', FOAF)
     gmess.bind('dso', DSO)
-    reg_obj = agn[AgenteActividades.name + '-search']
+    reg_obj = agn[GestorActividades.name + '-search']
     gmess.add((reg_obj, RDF.type, DSO.Search))
     gmess.add((reg_obj, DSO.AgentType, type))
 
     msg = build_message(gmess, perf=ACL.request,
-                        sender=AgenteActividades.uri,
+                        sender=GestorActividades.uri,
                         receiver=DirectoryAgent.uri,
                         content=reg_obj,
                         msgcnt=mss_cnt)
@@ -248,7 +245,6 @@ def agentbehavior1(cola):
 def resolverPlan(addr, ragn_uri, gm):
     peticion = myns_pet["SolicitarSeleccionActividades"]
 
-    ciudadIATA_destino = gm.value(subject= peticion, predicate= myns_atr.ciudadIATA_destino)
     ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
     dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
     dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
@@ -258,15 +254,15 @@ def resolverPlan(addr, ragn_uri, gm):
     adults = gm.value(subject= peticion, predicate= myns_atr.adults)
     radius = gm.value(subject= peticion, predicate= myns_atr.radius)
             
-    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA_destino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
+    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
                         ACL['confirm'],
-                        sender=AgenteActividades.uri,
+                        sender=GestorActividades.uri,
                         msgcnt=mss_cnt,
                         receiver=ragn_uri, 
                     )
     return gr
 
-def getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+def getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
 
     logger.info('Iniciamos busqueda en agente de informacion')
 
@@ -280,7 +276,6 @@ def getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA, dataIda, dataVuelta
     busqueda = myns_pet["ConsultarOpcionesActividades"]
 
     gmess.add((busqueda, myns_par.ciudadDestino, Literal(ciudadDestino)))
-    gmess.add((busqueda, myns_par.ciudadIATA, Literal(ciudadIATA)))
     gmess.add((busqueda, myns_par.dataIda, Literal(dataIda)))
     gmess.add((busqueda, myns_par.dataVuelta, Literal(dataVuelta)))
     gmess.add((busqueda, myns_par.precioHotel, Literal(precioHotel)))      
@@ -291,13 +286,13 @@ def getInfoHotels(addr, ragn_uri, ciudadDestino, ciudadIATA, dataIda, dataVuelta
 
     gmess.bind('foaf', FOAF)
     gmess.bind('dso', DSO)
-    req_obj = agn[AgenteActividades.name + '-InfoAgent']
+    req_obj = agn[GestorActividades.name + '-InfoAgent']
     gmess.add((req_obj, RDF.type, DSO.InfoAgent))
     gmess.add((req_obj, DSO.AgentType, DSO.TravelServiceAgent))
     
 
     msg = build_message(gmess, perf=ACL.request,
-                      sender=AgenteActividades.uri,
+                      sender=GestorActividades.uri,
                       receiver=ragn_uri,
                       content=req_obj,
                       msgcnt=mss_cnt)

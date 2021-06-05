@@ -35,10 +35,11 @@ from AgentUtil.Coordenadas import COORDENADAS
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
+from AgentUtil.IATACodes import convert_to_IATA
 
 __author__ = 'javier'
 
-AMADEUS_END_POINT = 'https://test.api.amadeus.com/v2/shopping/hotel-offers'
+AMADEUS_END_POINT = 'https://test.api.amadeus.com/v2'
 
 amadeus = Client(
     client_id=AMADEUS_KEY,
@@ -72,9 +73,6 @@ if args.open:
     hostaddr = gethostname()
 else:
     hostaddr = hostname = socket.gethostname()
-
-print('Hostname =', hostaddr)
-print('DS Port = ', port)
 
 if args.dport is None:
     dport = PUERTO_DIRECTORIO
@@ -132,7 +130,7 @@ if not args.verbose:
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
 
-def register_message():
+def registrar_hoteles():
     """
     Envia un mensaje de registro al servicio de registro
     usando una performativa Request y una accion Register del
@@ -141,7 +139,7 @@ def register_message():
     :return:
     """
 
-    logger.info('Nos registramos')
+    logger.info('Nos registramos como servicio de hoteles')
 
     global mss_cnt
 
@@ -156,6 +154,42 @@ def register_message():
     gmess.add((reg_obj, FOAF.name, Literal(InfoAmadeus.name)))
     gmess.add((reg_obj, DSO.Address, Literal(InfoAmadeus.address)))
     gmess.add((reg_obj, DSO.AgentType, DSO.HotelsAgent))
+
+    # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
+    gr = send_message(
+        build_message(gmess, perf=ACL.request,
+                      sender=InfoAmadeus.uri,
+                      receiver=DirectoryAgent.uri,
+                      content=reg_obj,
+                      msgcnt=mss_cnt),
+        DirectoryAgent.address)
+    mss_cnt += 1
+
+    return gr
+def registrar_actividades():
+    """
+    Envia un mensaje de registro al servicio de registro
+    usando una performativa Request y una accion Register del
+    servicio de directorio
+    :param gmess:
+    :return:
+    """
+
+    logger.info('Nos registramos como servicio de actividades')
+
+    global mss_cnt
+
+    gmess = Graph()
+
+    # Construimos el mensaje de registro
+    gmess.bind('foaf', FOAF)
+    gmess.bind('dso', DSO)
+    reg_obj = agn[InfoAmadeus.name + '-Register']
+    gmess.add((reg_obj, RDF.type, DSO.Register))
+    gmess.add((reg_obj, DSO.Uri, InfoAmadeus.uri))
+    gmess.add((reg_obj, FOAF.name, Literal(InfoAmadeus.name)))
+    gmess.add((reg_obj, DSO.Address, Literal(InfoAmadeus.address)))
+    gmess.add((reg_obj, DSO.AgentType, DSO.TravelServiceAgent))
 
     # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
     gr = send_message(
@@ -255,7 +289,8 @@ def agentbehavior1():
     """
     # Registramos el agente
     try:
-        gr = register_message()
+        gr = registrar_hoteles()
+        gr = registrar_actividades()
     except:
         logger.info("DirectoryAgent no localizado")
 
@@ -263,7 +298,7 @@ def infoHoteles(gm, msgdic):
     busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
 
     ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-    ciudadIATA = gm.value(subject= busqueda, predicate= myns_par.ciudadIATA)
+    ciudadIATA = convert_to_IATA(str(ciudadDestino))
     dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
     dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
     precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
@@ -315,7 +350,7 @@ def infoActividades(gm, msgdic):
     busqueda = myns_pet["ConsultarOpcionesActividades"]
 
     ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-    ciudadIATA = gm.value(subject= busqueda, predicate= myns_par.ciudadIATA)
+    ciudadIATA = convert_to_IATA(str(ciudadDestino))
     dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
     dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
     precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)

@@ -14,6 +14,8 @@ Asume que el agente de registro esta en el puerto 9000
 @author: javier
 """
 
+import multiprocessing
+from Agents.GestorAlojamiento import GestorAlojamiento
 from multiprocessing import Process, Queue
 import re
 import socket
@@ -66,9 +68,6 @@ if args.open:
 else:
     hostaddr = hostname = socket.gethostname()
 
-print('DS Hostname =', hostaddr)
-print('DS Port = ', port)
-
 if args.dport is None:
     dport = PUERTO_DIRECTORIO
 else:
@@ -99,13 +98,13 @@ AgenteUnificador = Agent('AgenteUnificador',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
-AgenteAlojamiento = Agent('AgenteAlojamiento',
-                       agn.AgenteAlojamiento,
+GestorAlojamiento = Agent('GestorAlojamiento',
+                       agn.GestorAlojamiento,
                        'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO),
                        'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO))
 
-AgenteActividades = Agent('AgenteActividades',
-                       agn.AgenteActividades,
+GestorActividades = Agent('GestorActividades',
+                       agn.GestorActividades,
                        'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES),
                        'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES))
 
@@ -137,21 +136,38 @@ def peticionPlan():
     roomQuantity = request.form['roomQuantity']
     adults = request.form['adults']
     radius = request.form['radius']
+    budget = request.form['budget']
     
     try:
         errorMessage = ''
-        ciudadIATA_origen = convertirIATA(ciudadOrigen)
-        ciudadIATA_destino = convertirIATA(ciudadDestino)
         nombre=''
         direccion=''
         actividad=''
-        gmAlojamiento = pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
-        gmActividad = pedirSeleccionActividades(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
-            
-        msgdicAlojamiento = get_message_properties(gmAlojamiento)
-        msgdicActividad = get_message_properties(gmActividad)
+
+        manager = multiprocessing.Manager()
+        return_dic = manager.dict()
+        p1 = Process(target=pedirSeleccionAlojamiento, args=(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic))
+        p2 = Process(target= pedirSeleccionActividades, args=(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic))
+        p3 = Process(target= pedirSeleccionTransporte, args=(ciudadDestino, ciudadOrigen, adults, budget, return_dic))
+        p1.start()
+        p2.start()
+        p3.start()
+
+        p1.join()
+        p2.join()
+        p3.join()
+
+        gAloj = return_dic['alojamiento']
+        gAct = return_dic['actividades']
+        #gTra = return_dic['transporte']
+
+        msgdicAlojamiento = get_message_properties(gAloj)
+        msgdicActividad = get_message_properties(gAct)
+        #msgdicTransporte = get_message_properties(gTra)
         perfAlojamiento = msgdicAlojamiento['performative']
         perfActividad = msgdicActividad['performative']
+        #perfTransporte = msgdicTransporte['performative']
+
         if(perfAlojamiento == ACL.failure or perfActividad== ACL.failure):
             hotelData = {
             'error': 1,
@@ -163,12 +179,14 @@ def peticionPlan():
             'errorMessage': 'Ningún agente de información encontrado'
         }
         else:
-            for s,p,o in gmAlojamiento.triples((None, myns_atr.esUn, myns.hotel)):
-                nombre = gmAlojamiento.value(subject=s, predicate=myns_atr.nombre)
-                direccion = gmAlojamiento.value(subject=s, predicate=myns_atr.direccion)
+            mults = gAloj.triples((None, myns_atr.esUn, myns.hotel))
+            s = next(mults)[0]
+            nombre = gAloj.value(subject=s, predicate=myns_atr.nombre)
+            direccion = gAloj.value(subject=s, predicate=myns_atr.direccion)
             
-            for s,p,o in gmActividad.triples((None, myns_atr.esUn, myns.activity)):
-                actividad = gmActividad.value(subject=s, predicate=myns_atr.nombre)
+            mults = gAct.triples((None, myns_atr.esUn, myns.activity))
+            s = next(mults)[0]
+            actividad = gAct.value(subject=s, predicate=myns_atr.nombre)
 
             hotelData= {
                 'ciudadOrigen' : ciudadOrigen,
@@ -227,7 +245,14 @@ def agentbehavior1(cola):
     """
     pass
 
-def pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+def pedirSeleccionTransporte(ciudadDestino, ciudadOrigen, adults, budget, return_dic):
+    logger.info('Iniciamos busqueda de Transporte')
+    gr = Graph()
+    logger.info('Transporte recibido')
+    return_dic['transporte'] =  gr
+
+
+def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic):
 
     global mss_cnt
     logger.info('Iniciamos busqueda de alojamiento')
@@ -238,7 +263,6 @@ def pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataV
 
     peticion = myns_pet["SolicitarSelecciónAlojamiento"]
 
-    gmess.add((peticion, myns_atr.ciudadIATA_destino, Literal(ciudadIATA_destino)))
     gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
     gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
     gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
@@ -258,19 +282,19 @@ def pedirSelecciónAlojamiento(ciudadIATA_destino, ciudadDestino, dataIda, dataV
 
     msg = build_message(gmess, perf=ACL.request,
                       sender=AgenteUnificador.uri,
-                      receiver=AgenteAlojamiento.uri,
+                      receiver=GestorAlojamiento.uri,
                       content=req_obj,
                       msgcnt=mss_cnt)
     
-    gr = send_message(msg, AgenteAlojamiento.address)
+    gr = send_message(msg, GestorAlojamiento.address)
     
     mss_cnt += 1
 
-    logger.info('Alojamientos recibidos')
+    logger.info('Alojamiento recibido')
     
-    return gr
+    return_dic['alojamiento'] =  gr
 
-def pedirSeleccionActividades(ciudadIATA_destino, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic):
 
     global mss_cnt
     logger.info('Iniciamos busqueda de actividades')
@@ -281,7 +305,6 @@ def pedirSeleccionActividades(ciudadIATA_destino, ciudadDestino, dataIda, dataVu
 
     peticion = myns_pet["SolicitarSeleccionActividades"]
 
-    gmess.add((peticion, myns_atr.ciudadIATA_destino, Literal(ciudadIATA_destino)))
     gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
     gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
     gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
@@ -301,30 +324,21 @@ def pedirSeleccionActividades(ciudadIATA_destino, ciudadDestino, dataIda, dataVu
 
     msg = build_message(gmess, perf=ACL.request,
                       sender=AgenteUnificador.uri,
-                      receiver=AgenteActividades.uri,
+                      receiver=GestorActividades.uri,
                       content=req_obj,
                       msgcnt=mss_cnt)
     
-    gr = send_message(msg, AgenteActividades.address)
+    gr = send_message(msg, GestorActividades.address)
     
     mss_cnt += 1
 
     logger.info('Actividades recibidas')
     
-    return gr
-
-def convertirIATA(ciudad):
-    try:
-        codigo = IATA[str(ciudad)]
-    except:
-        codigo = ''
-    finally:
-        return codigo
-
+    return_dic['actividades'] =  gr
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
-    # ab1 = Process(target=agentbehavior1, args=(cola1,))
+    #ab1 = Process(target=agentbehavior1, args=(cola1,))
     # ab1.start()
 
     # Ponemos en marcha el servidor

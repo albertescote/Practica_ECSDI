@@ -74,9 +74,6 @@ if args.open:
 else:
     hostaddr = hostname = socket.gethostname()
 
-print('Hostname =', hostaddr)
-print('DS Port = ', port)
-
 if args.dport is None:
     dport = PUERTO_DIRECTORIO
 else:
