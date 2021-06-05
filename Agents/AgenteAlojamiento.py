@@ -94,11 +94,11 @@ AgenteAlojamiento = Agent('AgenteAlojamiento',
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
-# Directory agent address
-DirectoryAgentHotels = Agent('DirectoryAgentHotels',
-                       agn.DirectoryAgentHotels,
-                       'http://%s:%d/Register' % (dhostname, dport),
-                       'http://%s:%d/Stop' % (dhostname, dport))
+# Datos del agente directorio
+DirectoryAgent = Agent("DirectoryAgent",
+                       agn.Directory,
+                       "http://%s:%d/Register" % (dhostname, dport),
+                       "http://%s:%d/Stop" % (dhostname, dport))
 
 # Global triplestore graph
 dsgraph = Graph()
@@ -239,10 +239,10 @@ def directory_search_message(type):
 
     msg = build_message(gmess, perf=ACL.request,
                         sender=AgenteAlojamiento.uri,
-                        receiver=DirectoryAgentHotels.uri,
+                        receiver=DirectoryAgent.uri,
                         content=reg_obj,
                         msgcnt=mss_cnt)
-    gr = send_message(msg, DirectoryAgentHotels.address)
+    gr = send_message(msg, DirectoryAgent.address)
     mss_cnt += 1
     logger.info('Recibimos informacion del agente')
 
