@@ -129,14 +129,14 @@ def peticionPlan():
 
     ciudadOrigen = request.form['ciudadOrigen']
     ciudadDestino = request.form['ciudadDestino']
-    dataIda = request.form['dataIda']
-    dataVuelta = request.form['dataVuelta']
-    precioHotel = request.form['precioHotel']
+    fechaIda = request.form['fechaIda']
+    fechaVuelta = request.form['fechaVuelta']
+    presupuestoAloj = request.form['presupuestoAloj']
     estrellas = request.form['estrellas']
-    roomQuantity = request.form['roomQuantity']
-    adults = request.form['adults']
-    radius = request.form['radius']
-    budget = request.form['budget']
+    nhabitaciones = request.form['nhabitaciones']
+    npersonas = request.form['npersonas']
+    dcentro = request.form['dcentro']
+    presupuestoVuelo = request.form['presupuestoVuelo']
     
     try:
         errorMessage = ''
@@ -146,9 +146,9 @@ def peticionPlan():
 
         manager = multiprocessing.Manager()
         return_dic = manager.dict()
-        p1 = Process(target=pedirSeleccionAlojamiento, args=(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic))
-        p2 = Process(target= pedirSeleccionActividades, args=(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic))
-        p3 = Process(target= pedirSeleccionTransporte, args=(ciudadDestino, ciudadOrigen, adults, budget, return_dic))
+        p1 = Process(target=pedirSeleccionAlojamiento, args=(ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro, return_dic))
+        p2 = Process(target= pedirSeleccionActividades, args=(ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro, return_dic))
+        p3 = Process(target= pedirSeleccionTransporte, args=(ciudadDestino, ciudadOrigen, npersonas, presupuestoVuelo, return_dic))
         p1.start()
         p2.start()
         p3.start()
@@ -191,8 +191,8 @@ def peticionPlan():
             hotelData= {
                 'ciudadOrigen' : ciudadOrigen,
                 'ciudadDestino' : ciudadDestino,
-                'dataIda' : dataIda,
-                'dataVuelta' : dataVuelta,
+                'fechaIda' : fechaIda,
+                'fechaVuelta' : fechaVuelta,
                 'nombreHotel': nombre,
                 'direccion' : direccion,
                 'nombreActividad': actividad,
