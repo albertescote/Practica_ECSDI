@@ -36,7 +36,6 @@ from AgentUtil.ACLMessages import build_message, send_message, get_message_prope
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
-from AgentUtil.CodigosIATA import IATA
 
 __author__ = 'javier'
 
