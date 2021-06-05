@@ -23,8 +23,10 @@ import argparse
 
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
-from flask import Flask , request, render_template  
+from flask import Flask , request, render_template
 
+from AgentUtil.AgentsPorts import PUERTO_UNIFICADOR, PUERTO_DIRECTORIO, PUERTO_GESTOR_ALOJAMIENTO, \
+    PUERTO_GESTOR_ACTIVIDADES
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
@@ -54,7 +56,7 @@ args = parser.parse_args()
 
 # Configuration stuff
 if args.port is None:
-    port = 9001
+    port = PUERTO_UNIFICADOR
 else:
     port = args.port
 
@@ -68,7 +70,7 @@ print('DS Hostname =', hostaddr)
 print('DS Port = ', port)
 
 if args.dport is None:
-    dport = 9000
+    dport = PUERTO_DIRECTORIO
 else:
     dport = args.dport
 
@@ -99,13 +101,13 @@ AgenteUnificador = Agent('AgenteUnificador',
 
 AgenteAlojamiento = Agent('AgenteAlojamiento',
                        agn.AgenteAlojamiento,
-                       'http://%s:%d/comm' % (hostaddr, 9002),
-                       'http://%s:%d/Stop' % (hostaddr, 9002))
+                       'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO),
+                       'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO))
 
 AgenteActividades = Agent('AgenteActividades',
                        agn.AgenteActividades,
-                       'http://%s:%d/comm' % (hostaddr, 9007),
-                       'http://%s:%d/Stop' % (hostaddr, 9007))
+                       'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES),
+                       'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES))
 
 
 # Global triplestore graph

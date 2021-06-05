@@ -18,6 +18,7 @@ from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
 
 from AgentUtil.ACL import ACL
+from AgentUtil.AgentsPorts import PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACLMessages import build_message, get_message_properties
@@ -48,7 +49,7 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 if args.port is None:
-    port = 9000
+    port = PUERTO_DIRECTORIO
 else:
     port = args.port
 

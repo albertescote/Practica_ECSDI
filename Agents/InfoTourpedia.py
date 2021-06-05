@@ -28,6 +28,7 @@ from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
 from flask import Flask , request
 
+from AgentUtil.AgentsPorts import PUERTO_INFO_TOURPEDIA, PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
@@ -63,7 +64,7 @@ args = parser.parse_args()
 
 # Configuration stuff
 if args.port is None:
-    port = 9004
+    port = PUERTO_INFO_TOURPEDIA
 else:
     port = args.port
 
@@ -77,7 +78,7 @@ print('Hostname =', hostaddr)
 print('DS Port = ', port)
 
 if args.dport is None:
-    dport = 9000
+    dport = PUERTO_DIRECTORIO
 else:
     dport = args.dport
 
