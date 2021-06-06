@@ -176,7 +176,6 @@ def comunicacion():
                                   sender=InfoActividades.uri,
                                   msgcnt=mss_cnt)
     else:
-        logger.info('Peticion de alojamiento recibida')
         res_graph = infoActividades(msg_graph, msgdic)
 
     mss_cnt += 1

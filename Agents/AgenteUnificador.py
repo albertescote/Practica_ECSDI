@@ -56,9 +56,6 @@ if not args.verbose:
     log.setLevel(logging.ERROR)
 
 agn = Namespace("http://www.agentes.org#")
-myns = Namespace("http://www.agentes.org/")
-myns_pet = Namespace("http://www.agentes.org/peticiones/")
-myns_atr = Namespace("http://www.agentes.org/atributos/")
 
 # Datos del agente unificador
 AgenteUnificador = Agent('AgenteUnificador',
@@ -178,12 +175,12 @@ def peticionPlan():
             gsearch = graph_aloj.triples((None, agn.esUn, agn.Hotel))
             alojamiento = next(gsearch)[0]
             nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Nombre)
-            direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.Direccion)
+            direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Direccion)
 
             # TODO: Coger y mostrar la información de más de una actividad
-            gsearch = graph_act.triples((None, myns_atr.esUn, myns.activity))
+            gsearch = graph_act.triples((None, agn.esUn, agn.activity))
             actividad = next(gsearch)[0]
-            nombre_act = graph_act.value(subject=actividad, predicate=myns_atr.nombre)
+            nombre_act = graph_act.value(subject=actividad, predicate=agn.nombre)
 
             displayData = {
                 'error': 0,
@@ -192,9 +189,12 @@ def peticionPlan():
                 'fechaIda': fechaIda,
                 'fechaVuelta': fechaVuelta,
                 'nombreHotel': nombre_aloj,
-                'direccion': direccion_aloj
+                'direccion': direccion_aloj,
+                'nombreActividad': nombre_act
             }
+            logger.info(displayData)
     except Exception as e:
+        logger.error(str(e))
         displayData = {
             "error": 1,
             "errorMessage": str(e)

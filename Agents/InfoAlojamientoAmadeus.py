@@ -171,7 +171,6 @@ def comunicacion():
                                   sender=InfoAmadeus.uri,
                                   msgcnt=mss_cnt)
     else:
-        logger.info('Peticion de alojamiento recibida')
         res_graph = infoHoteles(msg_graph, msgdic)
 
     mss_cnt += 1
@@ -273,41 +272,6 @@ def infoHoteles(msg_graph, msgdic):
     finally:
         return res_graph
 
-""" def infoActividades(gm, msgdic):
-    busqueda = myns_pet["ConsultarOpcionesActividades"]
-
-    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-    ciudadIATA = convert_to_IATA(str(ciudadDestino))
-    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
-    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
-    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
-    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
-    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
-    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
-    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
-                      
-    response = amadeus.shopping.activities.get(latitude=COORDENADAS[str(ciudadIATA)]['latitude'],
-                                               longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
-                                               radius=2)
-            
-    
-    gr = Graph()
-    gr.bind('myns_act', myns_act)
-
-    for activity in response.data:
-        activity_obj = myns_act[activity['id']]
-        gr.add((activity_obj, myns_atr.esUn, myns.activity))
-        gr.add((activity_obj, myns_atr.nombre, Literal(activity['name'])))
-
-        # Aqui realizariamos lo que pide la accion
-        # Por ahora simplemente retornamos un Inform-done
-        gr = build_message(gr,
-                        ACL['confirm'],
-                        sender=InfoAmadeus.uri,
-                        msgcnt=mss_cnt,
-                        receiver=msgdic['sender'], )
-    return gr
- """
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
     ab1 = Process(target=agentbehavior1)
