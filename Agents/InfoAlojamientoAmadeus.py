@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Agente de información de alojamiento y actividades. Se registra en el directorio de agentes como ello.
+Agente de información de alojamiento. Se registra en el directorio de agentes como ello.
 """
 
 from multiprocessing import Process, Queue
@@ -70,11 +70,11 @@ if not args.verbose:
 
 agn = Namespace("http://www.agentes.org#")
 
-# Datos del agente de información de transporte
+# Datos del agente de información de alojamiento
 InfoAmadeus = Agent("InfoAmadeus",
-                  agn.InfoAmadeus,
-                  "http://%s:%d/comm" % (hostaddr, port),
-                  "http://%s:%d/Stop" % (hostaddr, port))
+                    agn.InfoAmadeus,
+                    "http://%s:%d/comm" % (hostaddr, port),
+                    "http://%s:%d/Stop" % (hostaddr, port))
 
 # Datos del agente directorio
 DirectoryAgent = Agent("DirectoryAgent",
@@ -91,57 +91,13 @@ app = Flask(__name__)
 # Contador de mensajes
 mss_cnt = 0
 
-# Cola de comunicación entre procesos
-queue1 = Queue()
-
-def registrar_hoteles():
-    """
-    Envia un mensaje de registro al servicio de registro
-    usando una performativa Request y una accion Register del
-    servicio de directorio
-    :param gmess:
-    :return:
-    """
-
-    logger.info('Nos registramos como servicio de hoteles')
-
-    global mss_cnt
-
-    gmess = Graph()
-
-    # Construimos el mensaje de registro
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    reg_obj = agn[InfoAmadeus.name + '-Register']
-    gmess.add((reg_obj, RDF.type, DSO.Register))
-    gmess.add((reg_obj, DSO.Uri, InfoAmadeus.uri))
-    gmess.add((reg_obj, FOAF.name, Literal(InfoAmadeus.name)))
-    gmess.add((reg_obj, DSO.Address, Literal(InfoAmadeus.address)))
-    gmess.add((reg_obj, DSO.AgentType, DSO.HotelsAgent))
-
-    # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
-    gr = send_message(
-        build_message(gmess, perf=ACL.request,
-                      sender=InfoAmadeus.uri,
-                      receiver=DirectoryAgent.uri,
-                      content=reg_obj,
-                      msgcnt=mss_cnt),
-        DirectoryAgent.address)
-    mss_cnt += 1
-
-    return gr
-
-@app.route("/")
-def hello():
-    return "Agente InfoAmadeus en marcha!"
-
 
 @app.route("/comm")
 def comunicacion():
     """
     Entry point de comunicación con el agente.
 
-    Retorna un objeto que representa el resultado de una búsqueda de alojamiento o actividades.
+    Retorna un objeto que representa el resultado de una búsqueda de alojamiento.
 
     Asumimos que se reciben siempre acciones correctas, que se refieren a lo que puede hacer el agente, y que las
     acciones se reciben en un mensaje de tipo ACL.request.
@@ -149,7 +105,7 @@ def comunicacion():
     global igraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
+    logger.info("Petición de información de alojamiento recibida.")
     # Extraemos el mensaje y creamos un grafo con él
     message = request.args["content"]
     msg_graph = Graph()
@@ -175,16 +131,15 @@ def comunicacion():
 
     mss_cnt += 1
 
-    logger.info('Respondemos a la peticion')
+    logger.info("El agente de información de alojamiento responde a la petición.")
 
     return res_graph.serialize(format="xml")
+
 
 @app.route("/Stop")
 def stop():
     """
-    Entrypoint que para el agente
-
-    :return:
+    Entrada que para el agente.
     """
     tidyup()
     shutdown_server()
@@ -193,22 +148,10 @@ def stop():
 
 def tidyup():
     """
-    Acciones previas a parar el agente
-
+    Acciones previas a parar el agente.
     """
     pass
 
-
-def agentbehavior1():
-    """
-    Un comportamiento del agente
-    :return:
-    """
-    # Registramos el agente
-    try:
-        gr = registrar_hoteles()
-    except:
-        logger.info("DirectoryAgent no localizado")
 
 def infoHoteles(msg_graph, msgdic):
     """
@@ -238,29 +181,30 @@ def infoHoteles(msg_graph, msgdic):
     try:
         # Hace la búsqueda a la API Amadeus a través de su librería y guarda el resultado en formato JSON (accesible
         # como si fuera un diccionario Python)
-        response = amadeus.shopping.hotel_offers.get(cityCode=str(destinationIATA), 
-                                                    roomQuantity=int(roomQuantity),
-                                                    adults=int(adults),
-                                                    radius=int(radius),
-                                                    ratings=int(ratings),
-                                                    priceRange=hotelBudget,
-                                                    currency='EUR',
-                                                    view='LIGHT',
-                                                    )
-        
+        response = amadeus.shopping.hotel_offers.get(cityCode=str(destinationIATA),
+                                                     roomQuantity=int(roomQuantity),
+                                                     adults=int(adults),
+                                                     radius=int(radius),
+                                                     ratings=int(ratings),
+                                                     priceRange=hotelBudget,
+                                                     currency='EUR',
+                                                     view='LIGHT',
+                                                     )
+
         h = response.data[0]
         hotel = h['hotel']['hotelId']
-        address = h['hotel']['address']['lines'][0] + ', ' + h['hotel']['address']['cityName'] + ', ' + h['hotel']['address']['postalCode']
+        address = h['hotel']['address']['lines'][0] + ', ' + h['hotel']['address']['cityName'] + ', ' + \
+                  h['hotel']['address']['postalCode']
         hotel_obj = agn[hotel]
         res_graph.add((hotel_obj, agn.esUn, agn.Hotel))
         res_graph.add((hotel_obj, agn.Nombre, Literal(h['hotel']['name'])))
         res_graph.add((hotel_obj, agn.Direccion, Literal(address)))
 
         res_graph = build_message(res_graph,
-                                    ACL["inform"],
-                                    sender=InfoAmadeus.uri,
-                                    receiver=msgdic['sender'],
-                                    msgcnt=mss_cnt)
+                                  ACL["inform"],
+                                  sender=InfoAmadeus.uri,
+                                  receiver=msgdic['sender'],
+                                  msgcnt=mss_cnt)
 
     except ResponseError as error:
         logger.info(error)
@@ -272,14 +216,47 @@ def infoHoteles(msg_graph, msgdic):
     finally:
         return res_graph
 
+
+def registrar_hoteles():
+    """
+    Envia un mensaje de registro al servicio de registro usando una performativa 'Request' con
+    una acción 'Register' del servicio de directorio.
+    """
+    global mss_cnt
+
+    logger.info("Registro agente información de alojamiento.")
+
+    gmess = Graph()
+
+    # Construimos el mensaje de registro
+    gmess.bind('foaf', FOAF)
+    gmess.bind('dso', DSO)
+    reg_obj = agn[InfoAmadeus.name + '-Register']
+    gmess.add((reg_obj, RDF.type, DSO.Register))
+    gmess.add((reg_obj, DSO.Uri, InfoAmadeus.uri))
+    gmess.add((reg_obj, FOAF.name, Literal(InfoAmadeus.name)))
+    gmess.add((reg_obj, DSO.Address, Literal(InfoAmadeus.address)))
+    gmess.add((reg_obj, DSO.AgentType, DSO.HotelsAgent))
+
+    # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
+    gr = send_message(
+        build_message(gmess, perf=ACL.request,
+                      sender=InfoAmadeus.uri,
+                      receiver=DirectoryAgent.uri,
+                      content=reg_obj,
+                      msgcnt=mss_cnt),
+        DirectoryAgent.address)
+    mss_cnt += 1
+
+    return gr
+
+
 if __name__ == '__main__':
-    # Ponemos en marcha los behaviors
-    ab1 = Process(target=agentbehavior1)
-    ab1.start()
+    try:
+        gr = registrar_hoteles()
+    except:
+        logger.info("DirectoryAgent no localizado.")
 
-    # Ponemos en marcha el servidor
+    # Ponemos en marcha el servidor Flask
     app.run(host=hostname, port=port)
-
-    # Esperamos a que acaben los behaviors
-    ab1.join()
     logger.info('The End')
