@@ -1,86 +1,58 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Dec 27 15:58:13 2013
-
-Esqueleto de agente usando los servicios web de Flask
-
-/comm es la entrada para la recepcion de mensajes del agente
-/Stop es la entrada que para el agente
-
-Tiene una funcion AgentBehavior1 que se lanza como un thread concurrente
-
-Asume que el agente de registro esta en el puerto 9000
-
-@author: javier
+Agente que recibe la petición del plan de viaje e inicia las acciones para obtener una propuesta de plan de viaje.
+Posteriormente, junta todas las partes del plan y se lo envia al usuario.
 """
 
-import multiprocessing
-from Agents.GestorAlojamiento import GestorAlojamiento
-from multiprocessing import Process, Queue
-import re
-import socket
-import logging
 import argparse
+import logging
+import multiprocessing
+import socket
+from multiprocessing import Process
 
-
-from rdflib import Graph, RDF, Namespace, RDFS, Literal
+from flask import Flask, request, render_template
+from rdflib import Graph, RDF, Namespace, Literal
 from rdflib.namespace import FOAF
-from flask import Flask , request, render_template
 
-from AgentUtil.AgentsPorts import PUERTO_UNIFICADOR, PUERTO_DIRECTORIO, PUERTO_GESTOR_ALOJAMIENTO, \
-    PUERTO_GESTOR_ACTIVIDADES
-from AgentUtil.FlaskServer import shutdown_server
-from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
+from AgentUtil.Agent import Agent
+from AgentUtil.AgentsPorts import PUERTO_UNIFICADOR, PUERTO_GESTOR_ALOJAMIENTO, \
+    PUERTO_GESTOR_ACTIVIDADES, PUERTO_GESTOR_TRANSPORTE
 from AgentUtil.DSO import DSO
+from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
+from Agents.GestorAlojamiento import GestorAlojamiento
 
-__author__ = 'javier'
-
-# Definimos los parametros de la linea de comandos
+# Definimos los parámetros de la linea de comandos
 parser = argparse.ArgumentParser()
-parser.add_argument('--open', help="Define si el servidor est abierto al exterior o no", action='store_true',
+parser.add_argument("--open", help="Define si el servidor está abierto al exterior o no.", action="store_true",
                     default=False)
-parser.add_argument('--verbose', help="Genera un log de la comunicacion del servidor web", action='store_true',
-                        default=False)
-parser.add_argument('--port', type=int, help="Puerto de comunicacion del agente")
-parser.add_argument('--dhost', help="Host del agente de directorio")
-parser.add_argument('--dport', type=int, help="Puerto de comunicacion del agente de directorio")
+parser.add_argument("--port", type=int, help="Puerto de comunicación del agente.")
+parser.add_argument("--verbose", help="Genera un log de la comunicación del servidor web.", action="store_true",
+                    default=False)
 
 # Logging
 logger = config_logger(level=1)
 
-# parsing de los parametros de la linea de comandos
+# Parsing de los parámetros de la línea de comandos
 args = parser.parse_args()
 
-# Configuration stuff
+# Configuración
+if args.open:
+    hostname = "0.0.0.0"
+    hostaddr = gethostname()
+else:
+    hostaddr = hostname = socket.gethostname()
+
 if args.port is None:
     port = PUERTO_UNIFICADOR
 else:
     port = args.port
 
-if args.open:
-    hostname = '0.0.0.0'
-    hostaddr = gethostname()
-else:
-    hostaddr = hostname = socket.gethostname()
-
-if args.dport is None:
-    dport = PUERTO_DIRECTORIO
-else:
-    dport = args.dport
-
-if args.dhost is None:
-    dhostname = gethostname()
-else:
-    dhostname = args.dhost
-
-# Flask stuff
-app = Flask(__name__)
 if not args.verbose:
-    log = logging.getLogger('werkzeug')
+    log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
 
 agn = Namespace("http://www.agentes.org/")
@@ -88,171 +60,181 @@ myns = Namespace("http://www.agentes.org/")
 myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
 
+# Datos del agente unificador
+AgenteUnificador = Agent('AgenteUnificador',
+                         agn.AgenteUnificador,
+                         'http://%s:%d/comm' % (hostaddr, port),
+                         'http://%s:%d/Stop' % (hostaddr, port))
+
+# Datos del agente gestor de transporte
+GestorTransporte = Agent("GestorTransporte",
+                         agn.GestorTransporte,
+                         "http://%s:%d/Comm" % (hostaddr, PUERTO_GESTOR_TRANSPORTE),
+                         "http://%s:%d/Stop" % (hostaddr, PUERTO_GESTOR_TRANSPORTE))
+
+# Datos del agente gestor de alojamiento
+GestorAlojamiento = Agent('GestorAlojamiento',
+                          agn.GestorAlojamiento,
+                          'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO),
+                          'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO))
+
+# Datos del agente gestor de actividades
+GestorActividades = Agent('GestorActividades',
+                          agn.GestorActividades,
+                          'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES),
+                          'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES))
+
+# Grafo de estado del agente
+augraph = Graph()
+
+# Instanciamos el servidor Flask
+app = Flask(__name__)
+
 # Contador de mensajes
 mss_cnt = 0
 
-# Datos del Agente
-AgenteUnificador = Agent('AgenteUnificador',
-                       agn.AgenteUnificador,
-                       'http://%s:%d/comm' % (hostaddr, port),
-                       'http://%s:%d/Stop' % (hostaddr, port))
 
-GestorAlojamiento = Agent('GestorAlojamiento',
-                       agn.GestorAlojamiento,
-                       'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO),
-                       'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ALOJAMIENTO))
-
-GestorActividades = Agent('GestorActividades',
-                       agn.GestorActividades,
-                       'http://%s:%d/comm' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES),
-                       'http://%s:%d/Stop' % (hostaddr, PUERTO_GESTOR_ACTIVIDADES))
-
-
-# Global triplestore graph
-dsgraph = Graph()
-
-cola1 = Queue()
-
-# Flask stuff
-app = Flask(__name__)
-if not args.verbose:
-    log = logging.getLogger('werkzeug')
-    log.setLevel(logging.ERROR)
-
+# ENTRY POINTS
 @app.route("/")
 def main():
     return render_template('mainPage.html')
 
+
 @app.route("/", methods=['POST'])
 def peticionPlan():
+    # Extraemos el valor de los campos del formulario
 
+    # General
     ciudadOrigen = request.form['ciudadOrigen']
     ciudadDestino = request.form['ciudadDestino']
     fechaIda = request.form['fechaIda']
     fechaVuelta = request.form['fechaVuelta']
-    presupuestoAloj = request.form['presupuestoAloj']
-    estrellas = request.form['estrellas']
-    nhabitaciones = request.form['nhabitaciones']
-    npersonas = request.form['npersonas']
-    dcentro = request.form['dcentro']
-    presupuestoVuelo = request.form['presupuestoVuelo']
-    
-    try:
-        errorMessage = ''
-        nombre=''
-        direccion=''
-        actividad=''
 
+    # Vuelo
+    presupuestoVuelo = request.form['presupuestoVuelo']
+
+    # Alojamiento
+    npersonas = request.form['npersonas']
+    nhabitaciones = request.form['nhabitaciones']
+    estrellas = request.form['estrellas']
+    dcentro = request.form['dcentro']
+    presupuestoAloj = request.form['presupuestoAloj']
+
+    displayData = None
+
+    try:
+        # Ejecuta la selección de transporte, alojamiento y actividades en tres procesos diferentes para obtener
+        # paralelismo. Los tres procesos comparten un objeto llamado 'return_dic'.
         manager = multiprocessing.Manager()
         return_dic = manager.dict()
-        p1 = Process(target=pedirSeleccionAlojamiento, args=(ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro, return_dic))
-        p2 = Process(target= pedirSeleccionActividades, args=(ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro, return_dic))
-        p3 = Process(target= pedirSeleccionTransporte, args=(ciudadDestino, ciudadOrigen, npersonas, presupuestoVuelo, return_dic))
+        p1 = Process(target=pedirSeleccionAlojamiento, args=(
+            ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
+            return_dic))
+        p2 = Process(target=pedirSeleccionActividades, args=(
+            ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
+            return_dic))
+        p3 = Process(target=pedirSeleccionTransporte,
+                     args=(ciudadDestino, ciudadOrigen, npersonas, presupuestoVuelo, return_dic))
+
+        # Ejecuta los procesos
         p1.start()
         p2.start()
         p3.start()
 
+        # Espera hasta que los procesos hijo acaben
         p1.join()
         p2.join()
         p3.join()
 
-        gAloj = return_dic['alojamiento']
-        gAct = return_dic['actividades']
-        #gTra = return_dic['transporte']
+        # Extraemos por separado, del objeto compartido por los procesos 'return_dic', los grafos con los resultados de
+        # la selección de transporte, alojamiento y actividades.
+        # graph_trans = return_dic["transporte"]
+        graph_aloj = return_dic["alojamiento"]
+        graph_act = return_dic["actividades"]
 
-        msgdicAlojamiento = get_message_properties(gAloj)
-        msgdicActividad = get_message_properties(gAct)
-        #msgdicTransporte = get_message_properties(gTra)
-        perfAlojamiento = msgdicAlojamiento['performative']
-        perfActividad = msgdicActividad['performative']
-        #perfTransporte = msgdicTransporte['performative']
+        # Obtenemos la performativa de los mensajes en los tres casos
+        # msgdic_trans = get_message_properties(graph_trans)
+        msgdic_aloj = get_message_properties(graph_aloj)
+        msgdic_act = get_message_properties(graph_act)
 
-        if(perfAlojamiento == ACL.failure or perfActividad== ACL.failure):
-            hotelData = {
-            'error': 1,
-            'errorMessage': 'Parametros de entrada no válidos'
-        }
-        elif(perfAlojamiento == ACL.cancel or perfActividad == ACL.cancel):
-            hotelData = {
-            'error': 1,
-            'errorMessage': 'Ningún agente de información encontrado'
-        }
-        else:
-            mults = gAloj.triples((None, myns_atr.esUn, myns.hotel))
-            s = next(mults)[0]
-            nombre = gAloj.value(subject=s, predicate=myns_atr.nombre)
-            direccion = gAloj.value(subject=s, predicate=myns_atr.direccion)
-            
-            mults = gAct.triples((None, myns_atr.esUn, myns.activity))
-            s = next(mults)[0]
-            actividad = gAct.value(subject=s, predicate=myns_atr.nombre)
+        # perf_trans = msgdic_trans["performative"]
+        perf_aloj = msgdic_aloj["performative"]
+        perf_act = msgdic_act["performative"]
 
-            hotelData= {
-                'ciudadOrigen' : ciudadOrigen,
-                'ciudadDestino' : ciudadDestino,
-                'fechaIda' : fechaIda,
-                'fechaVuelta' : fechaVuelta,
-                'nombreHotel': nombre,
-                'direccion' : direccion,
-                'nombreActividad': actividad,
-                'error': 0
+        if perf_aloj == ACL.failure or perf_act == ACL.failure:
+            displayData = {
+                "error": 1,
+                "errorMessage": "Parámetros de entrada no válidos."
             }
-    except:
-        hotelData = {
-            'error': 1,
-            'errorMessage': 'Error de conexión entre agentes'
+        elif perf_aloj == ACL.cancel or perf_act == ACL.cancel:
+            displayData = {
+                "error": 1,
+                "errorMessage": "No se ha encontrado ningún agente de información."
+            }
+        else:
+            gsearch = graph_aloj.triples((None, myns_atr.esUn, myns.hotel))
+            alojamiento = next(gsearch)[0]
+            nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.nombre)
+            direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.direccion)
+
+            # TODO: Coger y mostrar la información de más de una actividad
+            gsearch = graph_act.triples((None, myns_atr.esUn, myns.activity))
+            actividad = next(gsearch)[0]
+            nombre_act = graph_act.value(subject=actividad, predicate=myns_atr.nombre)
+
+            displayData = {
+                'error': 0,
+                'ciudadOrigen': ciudadOrigen,
+                'ciudadDestino': ciudadDestino,
+                'fechaIda': fechaIda,
+                'fechaVuelta': fechaVuelta,
+                'nombreHotel': nombre_aloj,
+                'direccion': direccion_aloj,
+                'nombreActividad': nombre_act
+            }
+    except Exception as e:
+        displayData = {
+            "error": 1,
+            "errorMessage": str(e)
         }
     finally:
-        return render_template('processingPlan.html', hotelData=hotelData)
+        return render_template("processingPlan.html", displayData=displayData)
 
 
 @app.route("/comm")
-def comunicacion():
+def comunication():
     """
-    Entrypoint de comunicacion
+    Entry point de comunicación con el agente.
     """
-    global dsgraph
-    global mss_cnt
     pass
 
 
 @app.route("/Stop")
 def stop():
     """
-    Entrypoint que para el agente
-
-    :return:
+    Entrada que para el agente.
     """
     tidyup()
     shutdown_server()
-    return "Parando Servidor"
+    return "Parando servidor."
 
 
 def tidyup():
     """
-    Acciones previas a parar el agente
-
+    Acciones previas a parar el agente.
     """
     pass
 
-
-def agentbehavior1(cola):
-    """
-    Un comportamiento del agente
-
-    :return:
-    """
-    pass
 
 def pedirSeleccionTransporte(ciudadDestino, ciudadOrigen, adults, budget, return_dic):
     logger.info('Iniciamos busqueda de Transporte')
     gr = Graph()
     logger.info('Transporte recibido')
-    return_dic['transporte'] =  gr
+    return_dic['transporte'] = gr
 
 
-def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic):
-
+def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius,
+                              return_dic):
     global mss_cnt
     logger.info('Iniciamos busqueda de alojamiento')
 
@@ -271,30 +253,29 @@ def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, e
     gmess.add((peticion, myns_atr.adults, Literal(adults)))
     gmess.add((peticion, myns_atr.radius, Literal(radius)))
 
-    
     gmess.bind('foaf', FOAF)
     gmess.bind('dso', DSO)
     req_obj = agn[AgenteUnificador.name + '-SolverAgent']
     gmess.add((req_obj, RDF.type, DSO.SolverAgent))
     gmess.add((req_obj, DSO.AgentType, DSO.PersonalAgent))
-    
 
     msg = build_message(gmess, perf=ACL.request,
-                      sender=AgenteUnificador.uri,
-                      receiver=GestorAlojamiento.uri,
-                      content=req_obj,
-                      msgcnt=mss_cnt)
-    
+                        sender=AgenteUnificador.uri,
+                        receiver=GestorAlojamiento.uri,
+                        content=req_obj,
+                        msgcnt=mss_cnt)
+
     gr = send_message(msg, GestorAlojamiento.address)
-    
+
     mss_cnt += 1
 
     logger.info('Alojamiento recibido')
-    
-    return_dic['alojamiento'] =  gr
 
-def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius, return_dic):
+    return_dic['alojamiento'] = gr
 
+
+def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius,
+                              return_dic):
     global mss_cnt
     logger.info('Iniciamos busqueda de actividades')
 
@@ -313,36 +294,28 @@ def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, e
     gmess.add((peticion, myns_atr.adults, Literal(adults)))
     gmess.add((peticion, myns_atr.radius, Literal(radius)))
 
-    
     gmess.bind('foaf', FOAF)
     gmess.bind('dso', DSO)
     req_obj = agn[AgenteUnificador.name + '-SolverAgent']
     gmess.add((req_obj, RDF.type, DSO.SolverAgent))
     gmess.add((req_obj, DSO.AgentType, DSO.PersonalAgent))
-    
 
     msg = build_message(gmess, perf=ACL.request,
-                      sender=AgenteUnificador.uri,
-                      receiver=GestorActividades.uri,
-                      content=req_obj,
-                      msgcnt=mss_cnt)
-    
+                        sender=AgenteUnificador.uri,
+                        receiver=GestorActividades.uri,
+                        content=req_obj,
+                        msgcnt=mss_cnt)
+
     gr = send_message(msg, GestorActividades.address)
-    
+
     mss_cnt += 1
 
     logger.info('Actividades recibidas')
-    
-    return_dic['actividades'] =  gr
 
-if __name__ == '__main__':
-    # Ponemos en marcha los behaviors
-    #ab1 = Process(target=agentbehavior1, args=(cola1,))
-    # ab1.start()
+    return_dic['actividades'] = gr
 
-    # Ponemos en marcha el servidor
+
+if __name__ == "__main__":
+    # Ponemos en marcha el servidor Flask
     app.run(host=hostname, port=port)
-
-    # Esperamos a que acaben los behaviors
-    # ab1.join()
-    print('The End')
+    logger.info("The end.")
