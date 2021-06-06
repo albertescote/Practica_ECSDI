@@ -74,7 +74,7 @@ agn = Namespace("http://www.agentes.org#")
 
 # Datos del agente de información de transporte
 InfoActividades = Agent("InfoActividades",
-                  agn.InfoAmadeus,
+                  agn.InfoActividades,
                   "http://%s:%d/comm" % (hostaddr, port),
                   "http://%s:%d/Stop" % (hostaddr, port))
 
