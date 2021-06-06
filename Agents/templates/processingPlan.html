@@ -5,28 +5,53 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>ECSDI</title>
+    <style>
+        div {
+            margin-left: 2.0em;
+        }
+    </style>
   </head>
 	<body>
-    <div align="center">
-        <h1> Datos del viaje </h1>
-		    <!-- INFORMACION DE LOS HOTELES --> 
-        <div>
-          {% if displayData.error == 0 %}
-            <h3> Transporte </h3>
-            <p> Ciudad origen: {{  displayData.ciudadOrigen }} </p>
-            <p> Ciudad destino: {{  displayData.ciudadDestino }} </p>
-            <p> Fecha ida: {{  displayData.fechaIda }} </p>
-            <p> Fecha vuelta: {{  displayData.fechaVuelta }} </p>
-            <h3> Hotel </h3>
-            <p> Nombre hotel: {{  displayData.nombreHotel }} </p>
-            <p> Dirección hotel: {{  displayData.direccion }} </p>
-            <h3> Actividades </h3>
-            <p> Nombre actividad: {{  displayData.nombreActividad }} </p>
-          {% else %}
-          <h3> Error </h3>
-            <p> {{ displayData.errorMessage }} </p>
-          {% endif %}
-        </div>
-      </div>
+        {% if displayData.error == 0 %}
+            <h1>Viaje propuesto</h1>
+
+            <h2>General</h2>
+            <div>
+                <p><b>Ciudad origen: </b>{{  displayData.ciudadOrigen }}</p>
+                <p><b>Ciudad destino: </b>{{  displayData.ciudadDestino }}</p>
+                <p><b>Fecha ida: </b>{{  displayData.fechaIda }}</p>
+                <p><b>Fecha vuelta: </b>{{  displayData.fechaVuelta }}</p>
+            </div>
+
+            <h2>Vuelo</h2>
+            <div>
+                <p><b>Id. billete: </b>{{ displayData.idBillete }}</p>
+                <p><b>Hora salida: </b>{{ displayData.horaSalidaBillete }}</p>
+                <p><b>Hora llegada: </b>{{ displayData.horaLlegadaBillete }}</p>
+                <p><b>Asiento: </b>{{ displayData.asientoBillete }}</p>
+                <p><b>Clase: </b>{{ displayData.claseBillete }}</p>
+                <p><b>Precio: </b>{{ displayData.precioBillete }} €</p>
+            </div>
+
+            <h2>Hotel</h2>
+            <div>
+                <p><b>Nombre hotel: </b>{{  displayData.nombreAloj }}</p>
+                <p><b>Dirección hotel: </b>{{  displayData.direccionAloj }}</p>
+                <p><b>Precio: </b> €</p>
+            </div>
+
+            <h2>Actividades</h2>
+            <div>
+                <p><b>Nombre actividad: </b>{{  displayData.nombreActividad }}</p>
+            </div>
+
+        {% else %}
+            <h1>Error</h1>
+
+            <div>
+            <p style="color: darkred">{{ displayData.errorMessage }}</p>
+            </div>
+
+        {% endif %}
 	</body>
 </html>

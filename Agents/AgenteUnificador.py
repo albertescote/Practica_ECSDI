@@ -171,7 +171,14 @@ def peticionPlan():
         else:
             gsearch = graph_trans.triples((None, agn.esUn, agn.Billete))
             billete = next(gsearch)[0]
-            
+
+            id_billete = graph_trans.value(subject=billete, predicate=agn.Id)
+            hora_salida_billete = graph_trans.value(subject=billete, predicate=agn.DiaHoraSalida)
+            hora_llegada_billete = graph_trans.value(subject=billete, predicate=agn.DiaHoraLlegada)
+            asiento_billete = graph_trans.value(subject=billete, predicate=agn.Asiento)
+            clase_billete = graph_trans.value(subject=billete, predicate=agn.Clase)
+            precio_billete = graph_trans.value(subject=billete, predicate=agn.Precio)
+
             gsearch = graph_aloj.triples((None, agn.esUn, agn.Hotel))
             alojamiento = next(gsearch)[0]
             nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Nombre)
@@ -184,14 +191,20 @@ def peticionPlan():
             nombre_act = graph_act.value(subject=actividad, predicate=agn.nombre)
 
             displayData = {
-                'error': 0,
-                'ciudadOrigen': ciudadOrigen,
-                'ciudadDestino': ciudadDestino,
-                'fechaIda': fechaIda,
-                'fechaVuelta': fechaVuelta,
-                'nombreHotel': nombre_aloj,
-                'direccion': direccion_aloj,
-                'nombreActividad': nombre_act
+                "error": 0,
+                "ciudadOrigen": ciudadOrigen,
+                "ciudadDestino": ciudadDestino,
+                "fechaIda": fechaIda,
+                "fechaVuelta": fechaVuelta,
+                "idBillete": id_billete,
+                "horaSalidaBillete": hora_salida_billete,
+                "horaLlegadaBillete": hora_llegada_billete,
+                "asientoBillete": asiento_billete,
+                "claseBillete": clase_billete,
+                "precioBillete": precio_billete,
+                "nombreAloj": nombre_aloj,
+                "direccionAloj": direccion_aloj,
+                "nombreActividad": nombre_act
             }
 
     except Exception as e:
