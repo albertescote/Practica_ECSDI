@@ -156,7 +156,6 @@ def comunicacion():
         content = res_graph.value(subject=msg, predicate=ACL.content)
         agn_addr = res_graph.value(subject=content, predicate=DSO.Address)
         agn_uri = res_graph.value(subject=content, predicate=DSO.Uri)
-        logger.info(agn_addr)
 
         # Envía una mensaje de tipo ACL.request al agente de información de vuelos
         res_graph = infoagent_search(agn_addr, agn_uri, req_graph)
@@ -239,6 +238,7 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
     selection_req = agn["AgenteUnificador-SeleccionActividades"]
     ciudadDestino = req_graph.value(subject= selection_req, predicate= agn.ciudadDestino)
     radius = req_graph.value(subject= selection_req, predicate= agn.radius)
+    diasDeViaje = req_graph.value(subject= selection_req, predicate= agn.diasDeViaje)
 
     msg_graph = Graph()
 
@@ -260,13 +260,46 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
                         receiver=agn_uri,
                         content=search_req,
                         msgcnt=mss_cnt)
-    logger.info(agn_addr)
+    
     res_graph = send_message(msg, agn_addr)
+
+    selected_grapth = Graph()
+    gsearch = res_graph.triples((None, agn.esUn, agn.activity))
+    for i in range(int(diasDeViaje)):
+        # Seleccionamos actividad de mañana
+        actividad = next(gsearch)[0]
+        nombre_act = res_graph.value(subject=actividad, predicate=agn.nombre)
+        id_act = res_graph.value(subject=actividad, predicate=agn.id)
+
+        activity_obj = agn[id_act]
+        selected_grapth.add((activity_obj, agn.esUn, agn.activity))
+        selected_grapth.add((activity_obj, agn.nombre, Literal(nombre_act)))
+        selected_grapth.add((activity_obj, agn.horario, Literal('mañana')))
+
+        # Seleccionamos actividad de tarde
+        actividad = next(gsearch)[0]
+        nombre_act = res_graph.value(subject=actividad, predicate=agn.nombre)
+        id_act = res_graph.value(subject=actividad, predicate=agn.id)
+
+        activity_obj = agn[id_act]
+        selected_grapth.add((activity_obj, agn.esUn, agn.activity))
+        selected_grapth.add((activity_obj, agn.nombre, Literal(nombre_act)))
+        selected_grapth.add((activity_obj, agn.horario, Literal('tarde')))
+        
+        # Seleccionamos actividad de noche
+        actividad = next(gsearch)[0]
+        nombre_act = res_graph.value(subject=actividad, predicate=agn.nombre)
+        id_act = res_graph.value(subject=actividad, predicate=agn.id)
+
+        activity_obj = agn[id_act]
+        selected_grapth.add((activity_obj, agn.esUn, agn.activity))
+        selected_grapth.add((activity_obj, agn.nombre, Literal(nombre_act)))
+        selected_grapth.add((activity_obj, agn.horario, Literal('noche')))
 
     mss_cnt += 1
     logger.info('Actividades recibidas')
 
-    return res_graph
+    return selected_grapth
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors

@@ -5,6 +5,7 @@ Posteriormente, junta todas las partes del plan y se lo envia al usuario.
 """
 
 import argparse
+import datetime
 import logging
 import multiprocessing
 import socket
@@ -117,6 +118,12 @@ def peticionPlan():
     dcentro = request.form['dcentro']
     presupuestoAloj = request.form['presupuestoAloj']
 
+    # Actividades
+    date_time_ida = datetime.datetime.strptime(fechaIda, '%Y-%m-%d')
+    date_time_vuelta = datetime.datetime.strptime(fechaVuelta, '%Y-%m-%d')
+    dias_de_viaje = (date_time_vuelta - date_time_ida).days
+
+
     displayData = None
 
     try:
@@ -127,9 +134,7 @@ def peticionPlan():
         p1 = Process(target=pedirSeleccionAlojamiento, args=(
             ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
             return_dic))
-        p2 = Process(target=pedirSeleccionActividades, args=(
-            ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
-            return_dic))
+        p2 = Process(target=pedirSeleccionActividades, args=(ciudadDestino, dias_de_viaje, dcentro, return_dic))
         p3 = Process(target=pedirSeleccionTransporte,
                      args=(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta, presupuestoVuelo, return_dic))
 
@@ -187,9 +192,17 @@ def peticionPlan():
 
             # TODO: Coger y mostrar la información de más de una actividad
             gsearch = graph_act.triples((None, agn.esUn, agn.activity))
-            actividad = next(gsearch)[0]
-            nombre_act = graph_act.value(subject=actividad, predicate=agn.nombre)
-
+            actividades_manana = []
+            actividades_tarde = []
+            actividades_noche = []
+            for i in range(dias_de_viaje * 3):
+                actividad = next(gsearch)[0]
+                if graph_act.value(subject=actividad, predicate=agn.horario) == Literal('mañana'):
+                    actividades_manana.append(str(graph_act.value(subject=actividad, predicate=agn.nombre)))
+                elif graph_act.value(subject=actividad, predicate=agn.horario) == Literal('tarde'):
+                    actividades_tarde.append(str(graph_act.value(subject=actividad, predicate=agn.nombre)))
+                elif graph_act.value(subject=actividad, predicate=agn.horario) == Literal('noche'):
+                    actividades_noche.append(str(graph_act.value(subject=actividad, predicate=agn.nombre)))
             displayData = {
                 "error": 0,
                 "ciudadOrigen": ciudadOrigen,
@@ -205,9 +218,10 @@ def peticionPlan():
                 "nombreAloj": nombre_aloj,
                 "direccionAloj": direccion_aloj,
                 "precioAloj": precio_aloj,
-                "nombreActividad": nombre_act
+                'actividadesManana': actividades_manana,
+                'actividadesTarde': actividades_tarde,
+                'actividadesNoche': actividades_noche
             }
-
     except Exception as e:
         logger.error(str(e))
         displayData = {
@@ -313,8 +327,7 @@ def pedirSeleccionAlojamiento(ciudadDestino, fechaIda, fechaVuelta, presupuestoA
     return_dic["alojamiento"] = res_graph
 
 
-def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius,
-                              return_dic):
+def pedirSeleccionActividades(ciudadDestino, diasDeViaje, radius, return_dic):
     global mss_cnt
     logger.info('Iniciamos busqueda de actividades')
 
@@ -327,6 +340,7 @@ def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, e
     selection_req = agn["AgenteUnificador-SeleccionActividades"]
     msg_graph.add((selection_req, agn.ciudadDestino, Literal(ciudadDestino)))
     msg_graph.add((selection_req, agn.radius, Literal(radius)))
+    msg_graph.add((selection_req, agn.diasDeViaje, Literal(diasDeViaje)))
 
     msg = build_message(msg_graph, perf=ACL.request,
                         sender=AgenteUnificador.uri,

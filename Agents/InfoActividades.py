@@ -241,12 +241,13 @@ def infoActividades(msg_graph, msgdic):
         response = amadeus.shopping.activities.get(latitude=COORDENADAS[str(ciudadIATA)]['latitude'],
                                                 longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
                                                 radius=radius)
-                
-        activity = response.data[0]
 
-        activity_obj = agn[activity['id']]
-        res_graph.add((activity_obj, agn.esUn, agn.activity))
-        res_graph.add((activity_obj, agn.nombre, Literal(activity['name'])))
+        for activity in response.data:
+            logger.info(activity)
+            activity_obj = agn[activity['id']]
+            res_graph.add((activity_obj, agn.esUn, agn.activity))
+            res_graph.add((activity_obj, agn.nombre, Literal(activity['name'])))
+            res_graph.add((activity_obj, agn.id, Literal(activity['id'])))
 
         res_graph = build_message(res_graph,
                                   ACL['confirm'],
