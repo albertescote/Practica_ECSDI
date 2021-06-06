@@ -211,7 +211,7 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
     """
     global mss_cnt
 
-    logger.info("Hacemos una petición al servicio de información de vuelos.")
+    logger.info("Hace una petición al servicio de información de vuelos.")
 
     # Extraemos del grafo de petición el valor de los campos
     selection_req = agn["AgenteUnificador-SeleccionTransporte"]

@@ -1,17 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Dec 27 15:58:13 2013
-
-Esqueleto de agente usando los servicios web de Flask
-
-/comm es la entrada para la recepcion de mensajes del agente
-/Stop es la entrada que para el agente
-
-Tiene una funcion AgentBehavior1 que se lanza como un thread concurrente
-
-Asume que el agente de registro esta en el puerto 9000
-
-@author: javier
+Agente que busca en el directorio un agente de información de actividades y, una vez obtenida su dirección, le hace
+una petición de búsqueda de actividades (con sus respectivas restricciones).
 """
 
 from AgentUtil.OntoNamespaces import GR
@@ -20,10 +10,9 @@ import socket
 import logging
 import argparse
 
-
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
-from flask import Flask , request, render_template
+from flask import Flask, request, render_template
 
 from AgentUtil.AgentsPorts import PUERTO_GESTOR_ACTIVIDADES, PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
@@ -39,7 +28,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--open', help="Define si el servidor est abierto al exterior o no", action='store_true',
                     default=False)
 parser.add_argument('--verbose', help="Genera un log de la comunicacion del servidor web", action='store_true',
-                        default=False)
+                    default=False)
 parser.add_argument('--port', type=int, help="Puerto de comunicacion del agente")
 parser.add_argument('--dhost', help="Host del agente de directorio")
 parser.add_argument('--dport', type=int, help="Puerto de comunicacion del agente de directorio")
@@ -84,9 +73,9 @@ agn = Namespace("http://www.agentes.org#")
 mss_cnt = 0
 
 GestorActividades = Agent('GestorActividades',
-                       agn.GestorActividades,
-                       'http://%s:%d/comm' % (hostaddr, port),
-                       'http://%s:%d/Stop' % (hostaddr, port))
+                          agn.GestorActividades,
+                          'http://%s:%d/comm' % (hostaddr, port),
+                          'http://%s:%d/Stop' % (hostaddr, port))
 
 # Datos del agente directorio
 DirectoryAgent = Agent("DirectoryAgent",
@@ -112,20 +101,19 @@ if not args.verbose:
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
 
-@app.route("/")
-def hello():
-    return "Agente alojamiento en marcha!"
 
-
+# ENTRY POINTS
 @app.route("/comm")
 def comunicacion():
     """
-    Entrypoint de comunicacion
+    Entry point de comunicación con el agente.
+
+    Retorna un objeto que representa una selección de actividades de entre un conjunto de opciones posibles.
     """
     global gagraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
+    logger.info('Recibe petición de selección de actividades.')
 
     # Extraemos el mensaje y creamos un grafo con el
     message = request.args['content']
@@ -138,9 +126,9 @@ def comunicacion():
     if reqdic is None:
         # Si no es, respondemos que no hemos entendido el mensaje
         res_graph = build_message(Graph(),
-                           ACL['not-understood'], 
-                           sender=GestorActividades.uri, 
-                           msgcnt=mss_cnt)
+                                  ACL['not-understood'],
+                                  sender=GestorActividades.uri,
+                                  msgcnt=mss_cnt)
     elif reqdic["performative"] != ACL.request:
         # Si la performativa no es de tipo 'request', respondemos que no hemos entendido el mensaje
         res_graph = build_message(Graph(),
@@ -165,10 +153,10 @@ def comunicacion():
                                   ACL["confirm"],
                                   sender=GestorActividades.uri,
                                   msgcnt=mss_cnt)
-            
+
     mss_cnt += 1
 
-    logger.info('Respondemos a la peticion')
+    logger.info('Responde a la petición.')
 
     return res_graph.serialize(format='xml')
 
@@ -176,9 +164,7 @@ def comunicacion():
 @app.route("/Stop")
 def stop():
     """
-    Entrypoint que para el agente
-
-    :return:
+    Entrada que para el agente.
     """
     tidyup()
     shutdown_server()
@@ -187,19 +173,15 @@ def stop():
 
 def tidyup():
     """
-    Acciones previas a parar el agente
-
+    Acciones previas a parar el agente.
     """
     pass
 
+
 def directory_search(agent_type):
     """
-    Busca en el servicio de registro mandando un
-    mensaje de request con una accion Search del servicio de directorio
-    Podria ser mas adecuado mandar un query-ref y una descripcion de registo
-    con variables
-    :param type:
-    :return:
+    Busca en el servicio de registro un agente del tipo 'agent_type'. Para ello manda un mensaje
+    de tipo ACL.request con una acción Search del servicio de directorio.
     """
     global mss_cnt
     logger.info("Busca en el servicio de directorio un agente del tipo 'TravelServiceAgent'.")
@@ -221,7 +203,7 @@ def directory_search(agent_type):
                         msgcnt=mss_cnt)
     res_graph = send_message(msg, DirectoryAgent.address)
     mss_cnt += 1
-    logger.info('Recibimos informacion del agente')
+    logger.info("Recibe información de un agente del tipo 'TravelServiceAgent'.")
 
     return res_graph
 
@@ -233,12 +215,12 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
     """
     global mss_cnt
 
-    logger.info("Hacemos una petición al servicio de información de actividades.")
+    logger.info("Hace una petición al servicio de información de actividades.")
 
     # Extramos del grafo de petición el valor de los campos 
     selection_req = agn["AgenteUnificador-SeleccionActividades"]
-    ciudadDestino = req_graph.value(subject= selection_req, predicate= agn.ciudadDestino)
-    radius = req_graph.value(subject= selection_req, predicate= agn.radius)
+    ciudadDestino = req_graph.value(subject=selection_req, predicate=agn.ciudadDestino)
+    radius = req_graph.value(subject=selection_req, predicate=agn.radius)
 
     msg_graph = Graph()
 
@@ -264,18 +246,12 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
     res_graph = send_message(msg, agn_addr)
 
     mss_cnt += 1
-    logger.info('Actividades recibidas')
+    logger.info("Recibe respuesta a la petición al servicio de información de actividades.")
 
     return res_graph
 
-if __name__ == '__main__':
-    # Ponemos en marcha los behaviors
-    #ab1 = Process(target=agentbehavior1)
-    #ab1.start()
 
+if __name__ == '__main__':
     # Ponemos en marcha el servidor
     app.run(host=hostname, port=port)
-
-    # Esperamos a que acaben los behaviors
-    #ab1.join()
     logger.info('The End')
