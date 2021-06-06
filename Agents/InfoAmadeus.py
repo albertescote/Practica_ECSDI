@@ -90,7 +90,7 @@ if not args.verbose:
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
 
-agn = Namespace("http://www.agentes.org/")
+agn = Namespace("http://www.agentes.org#")
 myns = Namespace("http://www.agentes.org/")
 myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
