@@ -1,96 +1,75 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Dec 27 15:58:13 2013
-
-Esqueleto de agente usando los servicios web de Flask
-
-/comm es la entrada para la recepcion de mensajes del agente
-/Stop es la entrada que para el agente
-
-Tiene una funcion AgentBehavior1 que se lanza como un thread concurrente
-
-Asume que el agente de registro esta en el puerto 9000
-
-@author: javier
+Agente que busca en el directorio un agente de información de alojamientos y, una vez obtenida su dirección, le hace
+una petición de búsqueda de alojamiento (con sus respectivas restricciones).
 """
 
-from multiprocessing import Process, Queue
-import socket
-import logging
 import argparse
+import logging
+import socket
 
+from flask import Flask, request
+from rdflib import Graph, Namespace, Literal
+from rdflib.namespace import RDF
 
-from rdflib import Graph, RDF, Namespace, RDFS, Literal
-from rdflib.namespace import FOAF
-from flask import Flask , request, render_template
-
-from AgentUtil.AgentsPorts import PUERTO_GESTOR_ALOJAMIENTO, PUERTO_DIRECTORIO
-from AgentUtil.FlaskServer import shutdown_server
-from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
+from AgentUtil.Agent import Agent
+from AgentUtil.AgentsPorts import PUERTO_GESTOR_ALOJAMIENTO, PUERTO_DIRECTORIO
 from AgentUtil.DSO import DSO
+from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
 
-__author__ = 'javier'
-
-# Definimos los parametros de la linea de comandos
+# Definimos los parámetros de la linea de comandos
 parser = argparse.ArgumentParser()
-parser.add_argument('--open', help="Define si el servidor est abierto al exterior o no", action='store_true',
+parser.add_argument("--open", help="Define si el servidor está abierto al exterior o no.", action="store_true",
                     default=False)
-parser.add_argument('--verbose', help="Genera un log de la comunicacion del servidor web", action='store_true',
-                        default=False)
-parser.add_argument('--port', type=int, help="Puerto de comunicacion del agente")
-parser.add_argument('--dhost', help="Host del agente de directorio")
-parser.add_argument('--dport', type=int, help="Puerto de comunicacion del agente de directorio")
+parser.add_argument("--port", type=int, help="Puerto de comunicación del agente.")
+parser.add_argument("--dhost", help="Host del agente de directorio.")
+parser.add_argument("--dport", type=int, help="Puerto de comunicación del agente de directorio.")
+parser.add_argument("--verbose", help="Genera un log de la comunicación del servidor web.", action="store_true",
+                    default=False)
 
 # Logging
 logger = config_logger(level=1)
 
-# parsing de los parametros de la linea de comandos
+# Parsing de los parámetros de la línea de comandos
 args = parser.parse_args()
 
-# Configuration stuff
-if args.port is None:
-    port = PUERTO_GESTOR_ALOJAMIENTO
-else:
-    port = args.port
-
+# Configuración
 if args.open:
-    hostname = '0.0.0.0'
+    hostname = "0.0.0.0"
     hostaddr = gethostname()
 else:
     hostaddr = hostname = socket.gethostname()
 
-if args.dport is None:
-    dport = PUERTO_DIRECTORIO
+if args.port is None:
+    port = PUERTO_GESTOR_ALOJAMIENTO
 else:
-    dport = args.dport
+    port = args.port
 
 if args.dhost is None:
     dhostname = socket.gethostname()
 else:
     dhostname = args.dhost
 
-# Flask stuff
-app = Flask(__name__)
+if args.dport is None:
+    dport = PUERTO_DIRECTORIO
+else:
+    dport = args.dport
+
 if not args.verbose:
-    log = logging.getLogger('werkzeug')
+    log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
 
-agn = Namespace("http://www.agentes.org/")
-myns_pet = Namespace("http://www.agentes.org/peticiones/")
-myns_atr = Namespace("http://www.agentes.org/atributos/")
-myns_par = Namespace("http://my.namespace.org/parametros/")
+agn = Namespace("http://www.agentes.org#")
 
-# Contador de mensajes
-mss_cnt = 0
-
-GestorAlojamiento = Agent('GestorAlojamiento',
-                       agn.GestorAlojamiento,
-                       'http://%s:%d/comm' % (hostaddr, port),
-                       'http://%s:%d/Stop' % (hostaddr, port))
+# Datos del agente gestor de transporte
+GestorAlojamiento = Agent("GestorAlojamiento",
+                         agn.GestorAlojamiento,
+                         "http://%s:%d/comm" % (hostaddr, port),
+                         "http://%s:%d/Stop" % (hostaddr, port))
 
 # Datos del agente directorio
 DirectoryAgent = Agent("DirectoryAgent",
@@ -98,23 +77,15 @@ DirectoryAgent = Agent("DirectoryAgent",
                        "http://%s:%d/Register" % (dhostname, dport),
                        "http://%s:%d/Stop" % (dhostname, dport))
 
-# Global triplestore graph
-dsgraph = Graph()
+# Grafo de estado del agente
+gagraph = Graph()
 
-# Vinculamos todos los espacios de nombre a utilizar
-dsgraph.bind('acl', ACL)
-dsgraph.bind('rdf', RDF)
-dsgraph.bind('rdfs', RDFS)
-dsgraph.bind('foaf', FOAF)
-dsgraph.bind('dso', DSO)
-
-cola1 = Queue()
-
-# Flask stuff
+# Instanciamos el servidor Flask
 app = Flask(__name__)
-if not args.verbose:
-    log = logging.getLogger('werkzeug')
-    log.setLevel(logging.ERROR)
+
+# Contador de mensajes
+mss_cnt = 0
+
 
 @app.route("/")
 def hello():
@@ -123,78 +94,59 @@ def hello():
 
 @app.route("/comm")
 def comunicacion():
+
     """
-    Entrypoint de comunicacion
+    Entry point de comunicación con el agente.
+
+    Retorna un objeto que representa la selección de un alojamiento entre un conjunto de opciones posibles.
     """
-    global dsgraph
+    global gagraph
     global mss_cnt
 
     logger.info('Peticion de alojamiento recibida')
 
-    # Extraemos el mensaje y creamos un grafo con el
-    message = request.args['content']
-    gm = Graph()
-    gm.parse(data=message)
+    # Extraemos el mensaje y creamos un grafo con él
+    message = request.args["content"]
+    req_graph = Graph()
+    req_graph.parse(data=message)
 
-    msgdic = get_message_properties(gm)
+    reqdic = get_message_properties(req_graph)
 
-    # Comprobamos que sea un mensaje FIPA ACL
-    if msgdic is None:
-        # Si no es, respondemos que no hemos entendido el mensaje
-        gr = build_message(Graph(), ACL['not-understood'], sender=GestorAlojamiento.uri, msgcnt=mss_cnt)
+    # Comprobamos que sea un mensaje FIPA-ACL
+    if not reqdic:
+        # Si no lo es, respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=GestorAlojamiento.uri,
+                                  msgcnt=mss_cnt)
+    elif reqdic["performative"] != ACL.request:
+        # Si la performativa no es de tipo 'request', respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=GestorAlojamiento.uri,
+                                  msgcnt=mss_cnt)
     else:
-        # Obtenemos la performativa
-        perf = msgdic['performative']
+        # Busca en el directorio un agente de alojamientos
+        res_graph = directory_search(DSO.HotelsAgent)
 
-        if perf != ACL.request:
-            # Si no es un request, respondemos que no hemos entendido el mensaje
-            gr = build_message(Graph(), ACL['not-understood'], sender=GestorAlojamiento.uri, msgcnt=mss_cnt)
-        else:
-            # Extraemos el objeto del contenido que ha de ser una accion de la ontologia de acciones del agente
-            # de registro
+        # Obtiene la dirección del agente en la respuesta
+        msg = res_graph.value(predicate=RDF.type, object=ACL.FipaAclMessage)
+        content = res_graph.value(subject=msg, predicate=ACL.content)
+        agn_addr = res_graph.value(subject=content, predicate=DSO.Address)
+        agn_uri = res_graph.value(subject=content, predicate=DSO.Uri)
 
-            # Averiguamos el tipo de la accion
-            if 'content' in msgdic:
-                content = msgdic['content']
-                accion = gm.value(subject=content, predicate=RDF.type)
+        # Envía una mensaje de tipo ACL.request al agente de información de alojamientos
+        res_graph = infoagent_search(agn_addr, agn_uri, req_graph)
 
-            if accion == DSO.SolverAgent:
-                # Buscamos en el directorio
-                # un agente de hoteles
-                gmess = directory_search_message(DSO.HotelsAgent)
+        res_graph = build_message(res_graph,
+                                  ACL["confirm"],
+                                  sender=GestorAlojamiento.uri,
+                                  msgcnt=mss_cnt)
 
-                # Obtenemos la direccion del agente de la respuesta
-                # No hacemos ninguna comprobacion sobre si es un mensaje valido
-                msg = gmess.value(predicate=RDF.type, object=ACL.FipaAclMessage)
-                content = gmess.value(subject=msg, predicate=ACL.content)
-                ragn_addr = gmess.value(subject=content, predicate=DSO.Address)
-                ragn_uri = gmess.value(subject=content, predicate=DSO.Uri)
-
-                msgdic = get_message_properties(gmess)
-                perf = msgdic['performative']
-
-                if(perf== ACL.cancel):
-                    gr = build_message(Graph(),
-                        perf,
-                        sender=GestorAlojamiento.uri,
-                        msgcnt=mss_cnt,
-                        receiver=ragn_uri, 
-                    )
-                else:
-                    gr = resolverPlan(ragn_addr, ragn_uri, gm)
-            else:
-                gr = build_message(Graph(),
-                                   ACL['not-understood'],
-                                   sender=GestorAlojamiento.uri,
-                                   msgcnt=mss_cnt)
-            
-            
     mss_cnt += 1
-
     logger.info('Respondemos a la peticion')
 
-    return gr.serialize(format='xml')
-
+    return res_graph.serialize(format='xml')
 
 @app.route("/Stop")
 def stop():
@@ -215,119 +167,96 @@ def tidyup():
     """
     pass
 
-def directory_search_message(type):
+def directory_search(agent_type):
     """
-    Busca en el servicio de registro mandando un
-    mensaje de request con una accion Search del servicio de directorio
-    Podria ser mas adecuado mandar un query-ref y una descripcion de registo
-    con variables
-    :param type:
-    :return:
+    Busca en el servicio de registro un agente del tipo 'agent_type'. Para ello manda un mensaje
+    de tipo ACL.request con una acción Search del servicio de directorio.
     """
     global mss_cnt
+
     logger.info('Buscamos en el servicio de registro')
 
-    gmess = Graph()
+    msg_graph = Graph()
 
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    reg_obj = agn[GestorAlojamiento.name + '-search']
-    gmess.add((reg_obj, RDF.type, DSO.Search))
-    gmess.add((reg_obj, DSO.AgentType, type))
+    # Vinculamos los espacios de nombres que usaremos para construir el mensaje de búsqueda
+    msg_graph.bind("rdf", RDF)
+    msg_graph.bind("dso", DSO)
 
-    msg = build_message(gmess, perf=ACL.request,
-                        sender=GestorAlojamiento.uri,
-                        receiver=DirectoryAgent.uri,
-                        content=reg_obj,
-                        msgcnt=mss_cnt)
-    gr = send_message(msg, DirectoryAgent.address)
+    # Construimos el mensaje de búsqueda
+    obj = agn["GestorAlojamiento-Search"]
+    msg_graph.add((obj, RDF.type, DSO.Search))
+    msg_graph.add((obj, DSO.AgentType, agent_type))
+
+    res_graph = send_message(build_message(msg_graph,
+                                           ACL.request,
+                                           sender=GestorAlojamiento.uri,
+                                           receiver=DirectoryAgent.uri,
+                                           content=obj,
+                                           msgcnt=mss_cnt),
+                             DirectoryAgent.address)
+
     mss_cnt += 1
     logger.info('Recibimos informacion del agente')
 
-    return gr
 
+    return res_graph
 
-def agentbehavior1(cola):
+def infoagent_search(agn_addr, agn_uri, req_graph):
     """
-    Un comportamiento del agente
-    :return:
+    Hace una petición de búsqueda al agente de información de alojamiento (con sus respectivas restricciones) y obtiene
+    el resultado. Para ello manda un mensaje de tipo ACL.request con una acción Search del agente de información.
     """
-
-def resolverPlan(addr, ragn_uri, gm):
-    peticion = myns_pet["SolicitarSelecciónAlojamiento"]
-
-    ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
-    dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
-    dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
-    precioHotel = gm.value(subject= peticion, predicate= myns_atr.precioHotel)
-    estrellas = gm.value(subject= peticion, predicate= myns_atr.estrellas)
-    roomQuantity = gm.value(subject= peticion, predicate= myns_atr.roomQuantity)
-    adults = gm.value(subject= peticion, predicate= myns_atr.adults)
-    radius = gm.value(subject= peticion, predicate= myns_atr.radius)
-
-    gres = getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
-    msgdic = get_message_properties(gres)
-    #perf = msgdic['performative']
-    gr = build_message(gres,
-                        ACL.confirm,
-                        sender=GestorAlojamiento.uri,
-                        msgcnt=mss_cnt,
-                        receiver=ragn_uri, 
-                    )
-    return gr
-
-def getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
+    global mss_cnt
 
     logger.info('Iniciamos busqueda en agente de informacion')
 
-    global mss_cnt
+    # Extraemos del grafo de petición el valor de los campos
+    selection_req = agn["AgenteUnificador-SeleccionAlojamiento"]
+    destinationCity = req_graph.value(subject=selection_req, predicate=agn.destinationCity)
+    departureDate = req_graph.value(subject=selection_req, predicate=agn.departureDate)
+    comebackDate = req_graph.value(subject=selection_req, predicate=agn.comebackDate)
+    hotelBudget = req_graph.value(subject=selection_req, predicate=agn.hotelBudget)
+    ratings = req_graph.value(subject=selection_req, predicate=agn.ratings)
+    roomQuantity = req_graph.value(subject=selection_req, predicate=agn.roomQuantity)
+    adults = req_graph.value(subject=selection_req, predicate=agn.adults)
+    radius = req_graph.value(subject=selection_req, predicate=agn.radius)
 
-    # Graph para buscador
-    gmess = Graph()
-    gmess.bind('myns_pet', myns_pet)
-    gmess.bind('myns_atr', myns_atr)
-    
-    busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
+    msg_graph = Graph()
 
-    gmess.add((busqueda, myns_par.ciudadDestino, Literal(ciudadDestino)))
-    gmess.add((busqueda, myns_par.dataIda, Literal(dataIda)))
-    gmess.add((busqueda, myns_par.dataVuelta, Literal(dataVuelta)))
-    gmess.add((busqueda, myns_par.precioHotel, Literal(precioHotel)))      
-    gmess.add((busqueda, myns_par.estrellas, Literal(estrellas)))
-    gmess.add((busqueda, myns_par.roomQuantity, Literal(roomQuantity)))
-    gmess.add((busqueda, myns_par.adults, Literal(adults)))
-    gmess.add((busqueda, myns_par.radius, Literal(radius)))
+    # Supuesta ontología de acciones de agentes de información
+    IAA = Namespace('IAActions')
 
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    req_obj = agn[GestorAlojamiento.name + '-InfoAgent']
-    gmess.add((req_obj, RDF.type, DSO.InfoAgent))
-    gmess.add((req_obj, DSO.AgentType, DSO.HotelsAgent))
-    
+    # Vinculamos los espacios de nombres que usaremos para construir el mensaje de petición
+    msg_graph.bind("rdf", RDF)
+    msg_graph.bind("iaa", IAA)
 
-    msg = build_message(gmess, perf=ACL.request,
-                      sender=GestorAlojamiento.uri,
-                      receiver=ragn_uri,
-                      content=req_obj,
-                      msgcnt=mss_cnt)
+    # Construimos el mensaje de petición
+    search_req = agn["GestorAlojamiento-InfoSearch"]
+    msg_graph.add((search_req, RDF.type, IAA.SearchHotels))
+    msg_graph.add((search_req, agn.destinationCity, Literal(destinationCity)))
+    msg_graph.add((search_req, agn.departureDate, Literal(departureDate)))
+    msg_graph.add((search_req, agn.comebackDate, Literal(comebackDate)))
+    msg_graph.add((search_req, agn.hotelBudget, Literal(hotelBudget)))
+    msg_graph.add((search_req, agn.ratings, Literal(ratings)))
+    msg_graph.add((search_req, agn.roomQuantity, Literal(roomQuantity)))
+    msg_graph.add((search_req, agn.adults, Literal(adults)))
+    msg_graph.add((search_req, agn.radius, Literal(radius)))
 
-    gr = send_message(msg, addr)
-    
+    msg = build_message(msg_graph,
+                        perf=ACL.request,
+                        sender=GestorAlojamiento.uri,
+                        receiver=agn_uri,
+                        content=search_req,
+                        msgcnt=mss_cnt)
+    logger.info(agn_addr)
+    res_graph = send_message(msg, agn_addr)
+
     mss_cnt += 1
-
     logger.info('Alojamientos recibidos')
-    
-    return gr
 
+    return res_graph
 
 if __name__ == '__main__':
-    # Ponemos en marcha los behaviors
-    #ab1 = Process(target=agentbehavior1)
-    #ab1.start()
-
-    # Ponemos en marcha el servidor
+    # Ponemos en marcha el servidor Flask
     app.run(host=hostname, port=port)
-
-    # Esperamos a que acaben los behaviors
-    #ab1.join()
-    logger.info('The End')
+    logger.info("The end.")

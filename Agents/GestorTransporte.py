@@ -4,23 +4,22 @@ Agente que busca en el directorio un agente de información de transportes y, un
 una petición de búsqueda de transporte (con sus respectivas restricciones).
 """
 
-from multiprocessing import Process, Queue
-import logging
 import argparse
+import logging
+import socket
 
-from flask import Flask, render_template, request
+from flask import Flask, request
 from rdflib import Graph, Namespace, Literal
-from rdflib.namespace import FOAF, RDF
+from rdflib.namespace import RDF
 
 from AgentUtil.ACL import ACL
+from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
+from AgentUtil.Agent import Agent
 from AgentUtil.AgentsPorts import PUERTO_GESTOR_TRANSPORTE, PUERTO_DIRECTORIO
 from AgentUtil.DSO import DSO
 from AgentUtil.FlaskServer import shutdown_server
-from AgentUtil.ACLMessages import build_message, send_message
-from AgentUtil.Agent import Agent
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
-import socket
 
 # Definimos los parámetros de la linea de comandos
 parser = argparse.ArgumentParser()
@@ -69,7 +68,7 @@ agn = Namespace("http://www.agentes.org#")
 # Datos del agente gestor de transporte
 GestorTransporte = Agent("GestorTransporte",
                          agn.GestorTransporte,
-                         "http://%s:%d/Comm" % (hostaddr, port),
+                         "http://%s:%d/comm" % (hostaddr, port),
                          "http://%s:%d/Stop" % (hostaddr, port))
 
 # Datos del agente directorio
@@ -87,27 +86,62 @@ app = Flask(__name__)
 # Contador de mensajes
 mss_cnt = 0
 
-# Cola de comunicación entre procesos
-queue1 = Queue()
-
 
 # ENTRY POINTS
-@app.route("/Comm")
+@app.route("/comm")
 def comunication():
     """
     Entry point de comunicación con el agente.
+
+    Retorna un objeto que representa la selección de un billete de vuelo de entre un conjunto de opciones posibles.
     """
-    pass
+    global gtgraph
+    global mss_cnt
 
+    logger.info("Recibe petición de selección de transporte.")
 
-@app.route("/Iface", methods=['GET', 'POST'])
-def browser_iface():
-    if request.method == 'GET':
-        return render_template('iface.html')
+    # Extraemos el mensaje y creamos un grafo con él
+    message = request.args["content"]
+    req_graph = Graph()
+    req_graph.parse(data=message)
+
+    reqdic = get_message_properties(req_graph)
+
+    # Comprobamos que sea un mensaje FIPA-ACL
+    if not reqdic:
+        # Si no lo es, respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=GestorTransporte.uri,
+                                  msgcnt=mss_cnt)
+    elif reqdic["performative"] != ACL.request:
+        # Si la performativa no es de tipo 'request', respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=GestorTransporte.uri,
+                                  msgcnt=mss_cnt)
     else:
-        user = request.form['username']
-        mess = request.form['message']
-        return render_template('riface.html', user=user, mess=mess)
+        # Busca en el directorio un agente de vuelos
+        res_graph = directory_search(DSO.FlightsAgent)
+
+        # Obtiene la dirección del agente en la respuesta
+        msg = res_graph.value(predicate=RDF.type, object=ACL.FipaAclMessage)
+        content = res_graph.value(subject=msg, predicate=ACL.content)
+        agn_addr = res_graph.value(subject=content, predicate=DSO.Address)
+        agn_uri = res_graph.value(subject=content, predicate=DSO.Uri)
+
+        # Envía una mensaje de tipo ACL.request al agente de información de vuelos
+        res_graph = infoagent_search(agn_addr, agn_uri, req_graph)
+
+        res_graph = build_message(res_graph,
+                                  ACL["confirm"],
+                                  sender=GestorTransporte.uri,
+                                  msgcnt=mss_cnt)
+
+    mss_cnt += 1
+    logger.info("Responde a la petición.")
+
+    return res_graph.serialize(format='xml')
 
 
 @app.route("/Stop")
@@ -124,8 +158,7 @@ def tidyup():
     """
     Acciones previas a parar el agente.
     """
-    global queue1
-    queue1.put(0)
+    pass
 
 
 def directory_search(agent_type):
@@ -162,7 +195,7 @@ def directory_search(agent_type):
     return res_graph
 
 
-def infoagent_search(agn_addr, agn_uri):
+def infoagent_search(agn_addr, agn_uri, req_graph):
     """
     Hace una petición de búsqueda al agente de información de transporte (con sus respectivas restricciones) y obtiene
     el resultado. Para ello manda un mensaje de tipo ACL.request con una acción Search del agente de información.
@@ -170,6 +203,14 @@ def infoagent_search(agn_addr, agn_uri):
     global mss_cnt
 
     logger.info("Hacemos una petición al servicio de información de vuelos.")
+
+    # Extraemos del grafo de petición el valor de los campos
+    selection_req = agn["AgenteUnificador-SeleccionTransporte"]
+    originCity = req_graph.value(subject=selection_req, predicate=agn.originCity)
+    destinationCity = req_graph.value(subject=selection_req, predicate=agn.destinationCity)
+    departureDate = req_graph.value(subject=selection_req, predicate=agn.departureDate)
+    comebackDate = req_graph.value(subject=selection_req, predicate=agn.comebackDate)
+    budget = req_graph.value(subject=selection_req, predicate=agn.budget)
 
     msg_graph = Graph()
 
@@ -183,10 +224,11 @@ def infoagent_search(agn_addr, agn_uri):
     # Construimos el mensaje de petición
     search_req = agn["GestorTransporte-InfoSearch"]
     msg_graph.add((search_req, RDF.type, IAA.SearchFlights))
-    msg_graph.add((search_req, agn.originCity, Literal("Paris")))
-    msg_graph.add((search_req, agn.destinationCity, Literal("Barcelona")))
-    msg_graph.add((search_req, agn.departureDate, Literal("2021-06-21")))
-    msg_graph.add((search_req, agn.budget, Literal("250")))
+    msg_graph.add((search_req, agn.originCity, Literal(originCity)))
+    msg_graph.add((search_req, agn.destinationCity, Literal(destinationCity)))
+    msg_graph.add((search_req, agn.departureDate, Literal(departureDate)))
+    msg_graph.add((search_req, agn.comebackDate, Literal(comebackDate)))
+    msg_graph.add((search_req, agn.budget, Literal(budget)))
 
     res_graph = send_message(build_message(msg_graph,
                                            ACL.request,
@@ -201,44 +243,7 @@ def infoagent_search(agn_addr, agn_uri):
     return res_graph
 
 
-def agentbehaviour1(queue):
-    """
-    Esta función se ejecuta en paralelo al servidor Flask. Busca en el directorio un agente de información de
-    transporte, le hace una petición de búsqueda y obtiene el resultado.
-    """
-    # Busca en el directorio un agente de vuelos
-    res_graph = directory_search(DSO.FlightsAgent)
-
-    # Obtiene la dirección del agente en la respuesta
-    msg = res_graph.value(predicate=RDF.type, object=ACL.FipaAclMessage)
-    content = res_graph.value(subject=msg, predicate=ACL.content)
-    agn_addr = res_graph.value(subject=content, predicate=DSO.Address)
-    agn_uri = res_graph.value(subject=content, predicate=DSO.Uri)
-
-    # Envía una mensaje de tipo ACL.request con una acción de tipo Search, que está en una supuesta
-    # ontología de acciones de agentes
-    res_graph = infoagent_search(agn_addr, agn_uri)
-
-    fin = False
-    while not fin:
-        while queue.empty():
-            pass
-        v = queue.get()
-        if v == 0:
-            print(v)
-            return 0
-        else:
-            print(v)
-
-
 if __name__ == "__main__":
-    # Ponemos en marcha los behaviours como procesos
-    ab1 = Process(target=agentbehaviour1, args=(queue1,))
-    ab1.start()
-
     # Ponemos en marcha el servidor Flask
     app.run(host=hostname, port=port)
-
-    # Espera hasta que el proceso hijo termine
-    ab1.join()
     logger.info("The end.")
