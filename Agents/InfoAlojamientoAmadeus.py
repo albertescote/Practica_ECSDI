@@ -3,28 +3,25 @@
 Agente de información de alojamiento. Se registra en el directorio de agentes como ello.
 """
 
-from multiprocessing import Process, Queue
-import logging
 import argparse
+import logging
+import socket
 
+from amadeus import Client, ResponseError
 from flask import Flask, request
 from rdflib import Graph, Namespace, Literal
 from rdflib.namespace import FOAF, RDF
 
 from AgentUtil.ACL import ACL
-from AgentUtil.AgentsPorts import PUERTO_INFO_ALOJAMIENTO_AMADEUS, PUERTO_DIRECTORIO
-from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
-from AgentUtil.Agent import Agent
-from AgentUtil.Logging import config_logger
-from AgentUtil.DSO import DSO
-from AgentUtil.Util import gethostname
-import socket
-
-from amadeus import Client, ResponseError
 from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
+from AgentUtil.Agent import Agent
+from AgentUtil.AgentsPorts import PUERTO_INFO_ALOJAMIENTO_AMADEUS, PUERTO_DIRECTORIO
+from AgentUtil.DSO import DSO
+from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.IATACodes import convert_to_IATA
-from pprint import PrettyPrinter
+from AgentUtil.Logging import config_logger
+from AgentUtil.Util import gethostname
 
 # Definimos los parámetros de la linea de comandos
 parser = argparse.ArgumentParser()

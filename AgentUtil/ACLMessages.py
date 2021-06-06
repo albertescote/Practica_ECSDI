@@ -10,9 +10,10 @@ Created on 08/02/2014
 """
 __author__ = 'javier'
 
-from rdflib import Graph, URIRef
 import requests
+from rdflib import Graph, URIRef
 from rdflib.namespace import RDF, OWL
+
 from AgentUtil.ACL import ACL
 
 

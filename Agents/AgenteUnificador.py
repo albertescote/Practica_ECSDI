@@ -12,15 +12,13 @@ import socket
 from multiprocessing import Process
 
 from flask import Flask, request, render_template
-from rdflib import Graph, RDF, Namespace, Literal
-from rdflib.namespace import FOAF
+from rdflib import Graph, Namespace, Literal
 
 from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
 from AgentUtil.Agent import Agent
 from AgentUtil.AgentsPorts import PUERTO_UNIFICADOR, PUERTO_GESTOR_ALOJAMIENTO, \
     PUERTO_GESTOR_ACTIVIDADES, PUERTO_GESTOR_TRANSPORTE
-from AgentUtil.DSO import DSO
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname

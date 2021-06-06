@@ -4,22 +4,21 @@ Agente que busca en el directorio un agente de información de actividades y, un
 una petición de búsqueda de actividades (con sus respectivas restricciones).
 """
 
-from AgentUtil.OntoNamespaces import GR
-from multiprocessing import Process, Queue
-import socket
-import logging
 import argparse
+import logging
+import socket
+from multiprocessing import Queue
 
+from flask import Flask, request
 from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
-from flask import Flask, request, render_template
 
-from AgentUtil.AgentsPorts import PUERTO_GESTOR_ACTIVIDADES, PUERTO_DIRECTORIO
-from AgentUtil.FlaskServer import shutdown_server
-from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
+from AgentUtil.Agent import Agent
+from AgentUtil.AgentsPorts import PUERTO_GESTOR_ACTIVIDADES, PUERTO_DIRECTORIO
 from AgentUtil.DSO import DSO
+from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
 

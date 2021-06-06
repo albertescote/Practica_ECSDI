@@ -8,24 +8,22 @@ mientras el agente está ejecutándose.
 Las acciones que se pueden utilizar están definidas en la ontología directory-service-ontology.owl.
 """
 
-
-from multiprocessing import Process, Queue
 import argparse
 import logging
+import socket
 
 from flask import Flask, request, render_template
-from rdflib import Graph, RDF, Namespace, RDFS, Literal
+from rdflib import Graph, RDF, Namespace, RDFS
 from rdflib.namespace import FOAF
 
 from AgentUtil.ACL import ACL
-from AgentUtil.AgentsPorts import PUERTO_DIRECTORIO
-from AgentUtil.FlaskServer import shutdown_server
-from AgentUtil.Agent import Agent
 from AgentUtil.ACLMessages import build_message, get_message_properties
-from AgentUtil.Logging import config_logger
+from AgentUtil.Agent import Agent
+from AgentUtil.AgentsPorts import PUERTO_DIRECTORIO
 from AgentUtil.DSO import DSO
+from AgentUtil.FlaskServer import shutdown_server
+from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
-import socket
 
 # Definimos los parámetros de la linea de comandos
 parser = argparse.ArgumentParser()

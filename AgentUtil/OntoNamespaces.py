@@ -11,7 +11,7 @@ Diversos namespaces utiles y algunas clases y propiedades de esos namespaces
 """
 __author__ = 'bejar'
 
-from rdflib import Graph, RDF, RDFS, OWL, Namespace, Literal
+from rdflib import Namespace
 
 # FIPA ACL Ontology
 #ACL = Namespace("http://www.nuin.org/ontology/fipa/acl#")
