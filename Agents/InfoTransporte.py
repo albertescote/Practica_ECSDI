@@ -91,9 +91,6 @@ app = Flask(__name__)
 # Contador de mensajes
 mss_cnt = 0
 
-# Cola de comunicación entre procesos
-queue1 = Queue()
-
 
 # ENTRY POINTS
 @app.route("/comm")
@@ -141,14 +138,6 @@ def comunication():
     return res_graph.serialize(format="xml")
 
 
-@app.route("/Info")
-def info():
-    """
-    Entrada que da información del estado del agente.
-    """
-    return "El agente de información de transporte está funcionando."
-
-
 @app.route("/Stop")
 def stop():
     """
@@ -163,8 +152,7 @@ def tidyup():
     """
     Acciones previas a parar el agente.
     """
-    global queue1
-    queue1.put(0)
+    pass
 
 
 def get_flights(msg_graph, msgdic):
@@ -279,34 +267,12 @@ def register_message():
     return res_graph
 
 
-def agentbehaviour1(queue):
-    """
-    Esta función se ejecuta en paralelo al servidor Flask. Hace el registro en el directorio y luego espera mensajes
-    de una cola y los imprime por pantalla hasta que llega un 0.
-    """
-    # Registramos el agente
-    res_graph = register_message()
-
-    fin = False
-    while not fin:
-        while queue.empty():
-            pass
-        v = queue.get()
-        if v == 0:
-            print(v)
-            return 0
-        else:
-            print(v)
-
-
-if __name__ == "__main__":
-    # Ponemos en marcha los behaviours como procesos
-    ab1 = Process(target=agentbehaviour1, args=(queue1,))
-    ab1.start()
+if __name__ == '__main__':
+    try:
+        gr = register_message()
+    except:
+        logger.info("DirectoryAgent no localizado.")
 
     # Ponemos en marcha el servidor Flask
     app.run(host=hostname, port=port)
-
-    # Espera hasta que el proceso hijo termine
-    ab1.join()
-    logger.info("The end.")
+    logger.info('The end')
