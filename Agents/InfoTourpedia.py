@@ -28,7 +28,7 @@ from rdflib import Graph, RDF, Namespace, RDFS, Literal
 from rdflib.namespace import FOAF
 from flask import Flask , request
 
-from AgentUtil.AgentsPorts import PUERTO_INFO_TOURPEDIA, PUERTO_DIRECTORIO
+from AgentUtil.AgentsPorts import PUERTO_INFO_ALOJAMIENTO_TOURPEDIA, PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.Agent import Agent
 from AgentUtil.ACL import ACL
@@ -64,7 +64,7 @@ args = parser.parse_args()
 
 # Configuration stuff
 if args.port is None:
-    port = PUERTO_INFO_TOURPEDIA
+    port = PUERTO_INFO_ALOJAMIENTO_TOURPEDIA
 else:
     port = args.port
 
@@ -211,9 +211,6 @@ def comunicacion():
             if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
                 logger.info('Peticion de alojamiento recibida')
                 gr = infoHoteles(gm, msgdic)
-            elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
-                logger.info('Peticion de actividades recibida')
-                gr = infoActividades(gm, msgdic)
 
             else:
                 gr = build_message(Graph(),
@@ -311,49 +308,6 @@ def infoHoteles(gm, msgdic):
                             receiver=msgdic['sender'], )
     finally:
         return gr
-
-
-def infoActividades(gm, msgdic):
-    busqueda = myns_pet["ConsultarOpcionesActividades"]
-
-    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
-    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
-    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
-    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
-    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
-    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
-    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
-
-
-    # Obtenemos un atracciones en Bercelona que tengan Museu en el nombre
-    response = requests.get(TOURPEDIA_END_POINT+ 'getPlaces',
-                 params={'location': ciudadDestino, 'category': 'attraction', 'name': 'Parc'})
-
-    hoteles = response.json()
-    
-            
-    gr = Graph()
-    gr.bind('myns_hot', myns_hot)
-
-    for h in hoteles:
-        hotel = h['id']
-        r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
-        detalles_actividad = r.json()
-        hotel_obj = myns_hot[hotel]
-        gr.add((hotel_obj, myns_atr.esUn, myns.activity))
-        gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_actividad['name'])))
-
-        # Aqui realizariamos lo que pide la accion
-        # Por ahora simplemente retornamos un Inform-done
-        gr = build_message(gr,
-                        ACL['confirm'],
-                        sender=InfoTourpedia.uri,
-                        msgcnt=mss_cnt,
-                        receiver=msgdic['sender'], )
-    return gr
-
-
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors

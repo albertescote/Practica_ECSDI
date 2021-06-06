@@ -130,43 +130,43 @@ def peticionPlan():
         p1 = Process(target=pedirSeleccionAlojamiento, args=(
             ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
             return_dic))
-        #p2 = Process(target=pedirSeleccionActividades, args=(
-        #    ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
-        #    return_dic))
+        p2 = Process(target=pedirSeleccionActividades, args=(
+            ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
+            return_dic))
         p3 = Process(target=pedirSeleccionTransporte,
                      args=(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta, presupuestoVuelo, return_dic))
 
         # Ejecuta los procesos
         p1.start()
-        #p2.start()
+        p2.start()
         p3.start()
 
         # Espera hasta que los procesos hijo acaben
         p1.join()
-        #p2.join()
+        p2.join()
         p3.join()
 
         # Extraemos por separado, del objeto compartido por los procesos 'return_dic', los grafos con los resultados de
         # la selección de transporte, alojamiento y actividades.
         graph_trans = return_dic["transporte"]
         graph_aloj = return_dic["alojamiento"]
-        #graph_act = return_dic["actividades"]
+        graph_act = return_dic["actividades"]
 
         # Obtenemos la performativa de los mensajes en los tres casos
         msgdic_trans = get_message_properties(graph_trans)
         msgdic_aloj = get_message_properties(graph_aloj)
-        #msgdic_act = get_message_properties(graph_act)
+        msgdic_act = get_message_properties(graph_act)
 
         perf_trans = msgdic_trans["performative"]
         perf_aloj = msgdic_aloj["performative"]
-        #perf_act = msgdic_act["performative"]
+        perf_act = msgdic_act["performative"]
 
-        if perf_trans == ACL.failure or perf_aloj == ACL.failure:
+        if perf_trans == ACL.failure or perf_aloj == ACL.failure or perf_act == ACL.failure:
             displayData = {
                 "error": 1,
                 "errorMessage": "Parámetros de entrada no válidos."
             }
-        elif perf_trans == ACL.cancel or perf_aloj == ACL.cancel:
+        elif perf_trans == ACL.cancel or perf_aloj == ACL.cancel or perf_act == ACL.cancel:
             displayData = {
                 "error": 1,
                 "errorMessage": "No se ha encontrado ningún agente de información."
@@ -181,9 +181,9 @@ def peticionPlan():
             direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.Direccion)
 
             # TODO: Coger y mostrar la información de más de una actividad
-            #gsearch = graph_act.triples((None, myns_atr.esUn, myns.activity))
-            #actividad = next(gsearch)[0]
-            #nombre_act = graph_act.value(subject=actividad, predicate=myns_atr.nombre)
+            gsearch = graph_act.triples((None, myns_atr.esUn, myns.activity))
+            actividad = next(gsearch)[0]
+            nombre_act = graph_act.value(subject=actividad, predicate=myns_atr.nombre)
 
             displayData = {
                 'error': 0,
@@ -303,40 +303,29 @@ def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, e
     global mss_cnt
     logger.info('Iniciamos busqueda de actividades')
 
-    gmess = Graph()
-    gmess.bind('myns_pet', myns_pet)
-    gmess.bind('myns_atr', myns_atr)
+    msg_graph = Graph()
 
-    peticion = myns_pet["SolicitarSeleccionActividades"]
+    # Vinculamos todos los espacios de nombres a utilizar
+    msg_graph.bind("agn", agn)
 
-    gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
-    gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
-    gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
-    gmess.add((peticion, myns_atr.precioHotel, Literal(precioHotel)))
-    gmess.add((peticion, myns_atr.estrellas, Literal(estrellas)))
-    gmess.add((peticion, myns_atr.roomQuantity, Literal(roomQuantity)))
-    gmess.add((peticion, myns_atr.adults, Literal(adults)))
-    gmess.add((peticion, myns_atr.radius, Literal(radius)))
+    # Construimos el mensaje de petición
+    selection_req = agn["AgenteUnificador-SeleccionActividades"]
+    msg_graph.add((selection_req, agn.ciudadDestino, Literal(ciudadDestino)))
+    msg_graph.add((selection_req, agn.radius, Literal(radius)))
 
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    req_obj = agn[AgenteUnificador.name + '-SolverAgent']
-    gmess.add((req_obj, RDF.type, DSO.SolverAgent))
-    gmess.add((req_obj, DSO.AgentType, DSO.PersonalAgent))
-
-    msg = build_message(gmess, perf=ACL.request,
+    msg = build_message(msg_graph, perf=ACL.request,
                         sender=AgenteUnificador.uri,
                         receiver=GestorActividades.uri,
-                        content=req_obj,
+                        content=selection_req,
                         msgcnt=mss_cnt)
 
-    gr = send_message(msg, GestorActividades.address)
+    res_graph = send_message(msg, GestorActividades.address)
 
     mss_cnt += 1
 
     logger.info('Actividades recibidas')
 
-    return_dic['actividades'] = gr
+    return_dic['actividades'] = res_graph
 
 
 if __name__ == "__main__":

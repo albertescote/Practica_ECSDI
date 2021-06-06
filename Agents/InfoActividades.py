@@ -3,16 +3,18 @@
 Agente de información de alojamiento y actividades. Se registra en el directorio de agentes como ello.
 """
 
+from AgentUtil.Coordenadas import COORDENADAS
 from multiprocessing import Process, Queue
 import logging
 import argparse
+import amadeus
 
 from flask import Flask, request
 from rdflib import Graph, Namespace, Literal
 from rdflib.namespace import FOAF, RDF
 
 from AgentUtil.ACL import ACL
-from AgentUtil.AgentsPorts import PUERTO_INFO_ALOJAMIENTO_AMADEUS, PUERTO_DIRECTORIO
+from AgentUtil.AgentsPorts import PUERTO_INFO_ACTIVIDADES, PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
 from AgentUtil.Agent import Agent
@@ -50,7 +52,7 @@ else:
     hostaddr = hostname = socket.gethostname()
 
 if args.port is None:
-    port = PUERTO_INFO_ALOJAMIENTO_AMADEUS
+    port = PUERTO_INFO_ACTIVIDADES
 else:
     port = args.port
 
@@ -71,7 +73,7 @@ if not args.verbose:
 agn = Namespace("http://www.agentes.org#")
 
 # Datos del agente de información de transporte
-InfoAmadeus = Agent("InfoAmadeus",
+InfoActividades = Agent("InfoActividades",
                   agn.InfoAmadeus,
                   "http://%s:%d/comm" % (hostaddr, port),
                   "http://%s:%d/Stop" % (hostaddr, port))
@@ -94,7 +96,7 @@ mss_cnt = 0
 # Cola de comunicación entre procesos
 queue1 = Queue()
 
-def registrar_hoteles():
+def registrar_actividades():
     """
     Envia un mensaje de registro al servicio de registro
     usando una performativa Request y una accion Register del
@@ -103,26 +105,29 @@ def registrar_hoteles():
     :return:
     """
 
-    logger.info('Nos registramos como servicio de hoteles')
+    logger.info('Nos registramos como servicio de actividades')
 
     global mss_cnt
 
-    gmess = Graph()
+    msg_graph = Graph()
 
-    # Construimos el mensaje de registro
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    reg_obj = agn[InfoAmadeus.name + '-Register']
-    gmess.add((reg_obj, RDF.type, DSO.Register))
-    gmess.add((reg_obj, DSO.Uri, InfoAmadeus.uri))
-    gmess.add((reg_obj, FOAF.name, Literal(InfoAmadeus.name)))
-    gmess.add((reg_obj, DSO.Address, Literal(InfoAmadeus.address)))
-    gmess.add((reg_obj, DSO.AgentType, DSO.HotelsAgent))
+    # Vinculamos los espacios de nombres que usaremos para construir el mensaje de registro
+    msg_graph.bind("rdf", RDF)
+    msg_graph.bind("foaf", FOAF)
+    msg_graph.bind("dso", DSO)
+
+    reg_obj = agn[InfoActividades.name + '-Register']
+    msg_graph.add((reg_obj, RDF.type, DSO.Register))
+    msg_graph.add((reg_obj, DSO.Uri, InfoActividades.uri))
+    msg_graph.add((reg_obj, FOAF.name, Literal(InfoActividades.name)))
+    msg_graph.add((reg_obj, DSO.Address, Literal(InfoActividades.address)))
+    msg_graph.add((reg_obj, DSO.AgentType, DSO.TravelServiceAgent))
 
     # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
     gr = send_message(
-        build_message(gmess, perf=ACL.request,
-                      sender=InfoAmadeus.uri,
+        build_message(msg_graph, 
+                      perf=ACL.request,
+                      sender=InfoActividades.uri,
                       receiver=DirectoryAgent.uri,
                       content=reg_obj,
                       msgcnt=mss_cnt),
@@ -149,7 +154,7 @@ def comunicacion():
     global igraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
+    logger.info('Peticion de actividades recibida')
     # Extraemos el mensaje y creamos un grafo con él
     message = request.args["content"]
     msg_graph = Graph()
@@ -162,17 +167,17 @@ def comunicacion():
         # Si no lo es, respondemos que no hemos entendido el mensaje
         res_graph = build_message(Graph(),
                                   ACL["not-understood"],
-                                  sender=InfoAmadeus.uri,
+                                  sender=InfoActividades.uri,
                                   msgcnt=mss_cnt)
     elif msgdic["performative"] != ACL.request:
         # Si la performativa no es de tipo 'request', respondemos que no hemos entendido el mensaje
         res_graph = build_message(Graph(),
                                   ACL["not-understood"],
-                                  sender=InfoAmadeus.uri,
+                                  sender=InfoActividades.uri,
                                   msgcnt=mss_cnt)
     else:
         logger.info('Peticion de alojamiento recibida')
-        res_graph = infoHoteles(msg_graph, msgdic)
+        res_graph = infoActividades(msg_graph, msgdic)
 
     mss_cnt += 1
 
@@ -207,29 +212,24 @@ def agentbehavior1():
     """
     # Registramos el agente
     try:
-        gr = registrar_hoteles()
+        gr = registrar_actividades()
     except:
         logger.info("DirectoryAgent no localizado")
 
-def infoHoteles(msg_graph, msgdic):
+def infoActividades(msg_graph, msgdic):
     """
-    Retorna un mensaje en formato FIPA-ACL, de tipo 'inform', que contiene el resultado de la búsqueda de alojamientos hecha
+    Devuelve un mensaje en formato FIPA-ACL, de tipo 'inform', que contiene el resultado de la búsqueda de actividades hecha
     en la API Amadeus con los criterio de búsqueda que hay en el grafo msg_graph, pasado como parámetro. En caso de
     producirse un error, la función retorna un mensaje FIPA-ACL de tipo 'failure'.
     """
     res_graph = Graph()
 
     # Extraemos los campos de búsqueda del contenido del mensaje, una vez que este está expresado como un grafo
-    search_req = agn["GestorAlojamiento-InfoSearch"]
-    destinationCity = msg_graph.value(subject=search_req, predicate=agn.destinationCity)
-    destinationIATA = convert_to_IATA(str(destinationCity))
-    departureDate = msg_graph.value(subject=search_req, predicate=agn.departureDate)
-    comebackDate = msg_graph.value(subject=search_req, predicate=agn.comebackDate)
-    hotelBudget = msg_graph.value(subject=search_req, predicate=agn.hotelBudget)
-    ratings = msg_graph.value(subject=search_req, predicate=agn.ratings)
-    roomQuantity = msg_graph.value(subject=search_req, predicate=agn.roomQuantity)
-    adults = msg_graph.value(subject=search_req, predicate=agn.adults)
-    radius = msg_graph.value(subject=search_req, predicate=agn.radius)
+    search_req = agn["GestorActividades-InfoSearch"]
+
+    ciudadDestino = msg_graph.value(subject=search_req, predicate=agn.ciudadDestino)
+    ciudadIATA = convert_to_IATA(str(ciudadDestino))
+    radius = msg_graph.value(subject= search_req, predicate= agn.radius)
 
     amadeus = Client(
         client_id=AMADEUS_KEY,
@@ -238,76 +238,32 @@ def infoHoteles(msg_graph, msgdic):
 
     try:
         # Hace la búsqueda a la API Amadeus a través de su librería y guarda el resultado en formato JSON (accesible
-        # como si fuera un diccionario Python)
-        response = amadeus.shopping.hotel_offers.get(cityCode=str(destinationIATA), 
-                                                    roomQuantity=int(roomQuantity),
-                                                    adults=int(adults),
-                                                    radius=int(radius),
-                                                    ratings=int(ratings),
-                                                    priceRange=hotelBudget,
-                                                    currency='EUR',
-                                                    view='LIGHT',
-                                                    )
-        
-        h = response.data[0]
-        hotel = h['hotel']['hotelId']
-        address = h['hotel']['address']['lines'][0] + ', ' + h['hotel']['address']['cityName'] + ', ' + h['hotel']['address']['postalCode']
-        hotel_obj = agn[hotel]
-        res_graph.add((hotel_obj, agn.esUn, agn.Hotel))
-        res_graph.add((hotel_obj, agn.Nombre, Literal(h['hotel']['name'])))
-        res_graph.add((hotel_obj, agn.Direccion, Literal(address)))
+        # como si fuera un diccionario Python)   
+        response = amadeus.shopping.activities.get(latitude=COORDENADAS[str(ciudadIATA)]['latitude'],
+                                                longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
+                                                radius=radius)
+                
+        activity = response.data[0]
+
+        activity_obj = agn[activity['id']]
+        res_graph.add((activity_obj, agn.esUn, agn.activity))
+        res_graph.add((activity_obj, agn.nombre, Literal(activity['name'])))
 
         res_graph = build_message(res_graph,
-                                    ACL["inform"],
-                                    sender=InfoAmadeus.uri,
-                                    receiver=msgdic['sender'],
-                                    msgcnt=mss_cnt)
-
+                                  ACL['confirm'],
+                                  sender=InfoActividades.uri,
+                                  msgcnt=mss_cnt,
+                                  receiver=msgdic['sender'])
     except ResponseError as error:
         logger.info(error)
         res_graph = build_message(res_graph,
                                   ACL["failure"],
-                                  sender=InfoAmadeus.uri,
+                                  sender=InfoActividades.uri,
                                   receiver=msgdic['sender'],
                                   msgcnt=mss_cnt)
     finally:
         return res_graph
 
-""" def infoActividades(gm, msgdic):
-    busqueda = myns_pet["ConsultarOpcionesActividades"]
-
-    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-    ciudadIATA = convert_to_IATA(str(ciudadDestino))
-    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
-    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
-    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
-    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
-    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
-    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
-    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
-                      
-    response = amadeus.shopping.activities.get(latitude=COORDENADAS[str(ciudadIATA)]['latitude'],
-                                               longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
-                                               radius=2)
-            
-    
-    gr = Graph()
-    gr.bind('myns_act', myns_act)
-
-    for activity in response.data:
-        activity_obj = myns_act[activity['id']]
-        gr.add((activity_obj, myns_atr.esUn, myns.activity))
-        gr.add((activity_obj, myns_atr.nombre, Literal(activity['name'])))
-
-        # Aqui realizariamos lo que pide la accion
-        # Por ahora simplemente retornamos un Inform-done
-        gr = build_message(gr,
-                        ACL['confirm'],
-                        sender=InfoAmadeus.uri,
-                        msgcnt=mss_cnt,
-                        receiver=msgdic['sender'], )
-    return gr
- """
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
     ab1 = Process(target=agentbehavior1)

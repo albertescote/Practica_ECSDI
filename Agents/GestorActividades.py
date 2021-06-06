@@ -14,6 +14,7 @@ Asume que el agente de registro esta en el puerto 9000
 @author: javier
 """
 
+from AgentUtil.OntoNamespaces import GR
 from multiprocessing import Process, Queue
 import socket
 import logging
@@ -32,8 +33,6 @@ from AgentUtil.ACLMessages import build_message, send_message, get_message_prope
 from AgentUtil.DSO import DSO
 from AgentUtil.Logging import config_logger
 from AgentUtil.Util import gethostname
-
-__author__ = 'javier'
 
 # Definimos los parametros de la linea de comandos
 parser = argparse.ArgumentParser()
@@ -80,9 +79,6 @@ if not args.verbose:
     log.setLevel(logging.ERROR)
 
 agn = Namespace("http://www.agentes.org#")
-myns_pet = Namespace("http://www.agentes.org/peticiones/")
-myns_atr = Namespace("http://www.agentes.org/atributos/")
-myns_par = Namespace("http://my.namespace.org/parametros/")
 
 # Contador de mensajes
 mss_cnt = 0
@@ -99,14 +95,14 @@ DirectoryAgent = Agent("DirectoryAgent",
                        "http://%s:%d/Stop" % (dhostname, dport))
 
 # Global triplestore graph
-dsgraph = Graph()
+gagraph = Graph()
 
 # Vinculamos todos los espacios de nombre a utilizar
-dsgraph.bind('acl', ACL)
-dsgraph.bind('rdf', RDF)
-dsgraph.bind('rdfs', RDFS)
-dsgraph.bind('foaf', FOAF)
-dsgraph.bind('dso', DSO)
+gagraph.bind('acl', ACL)
+gagraph.bind('rdf', RDF)
+gagraph.bind('rdfs', RDFS)
+gagraph.bind('foaf', FOAF)
+gagraph.bind('dso', DSO)
 
 cola1 = Queue()
 
@@ -126,63 +122,55 @@ def comunicacion():
     """
     Entrypoint de comunicacion
     """
-    global dsgraph
+    global gagraph
     global mss_cnt
 
     logger.info('Peticion de alojamiento recibida')
 
     # Extraemos el mensaje y creamos un grafo con el
     message = request.args['content']
-    gm = Graph()
-    gm.parse(data=message)
+    req_graph = Graph()
+    req_graph.parse(data=message)
 
-    msgdic = get_message_properties(gm)
+    reqdic = get_message_properties(req_graph)
 
     # Comprobamos que sea un mensaje FIPA ACL
-    if msgdic is None:
+    if reqdic is None:
         # Si no es, respondemos que no hemos entendido el mensaje
-        gr = build_message(Graph(), ACL['not-understood'], sender=GestorActividades.uri, msgcnt=mss_cnt)
+        res_graph = build_message(Graph(),
+                           ACL['not-understood'], 
+                           sender=GestorActividades.uri, 
+                           msgcnt=mss_cnt)
+    elif reqdic["performative"] != ACL.request:
+        # Si la performativa no es de tipo 'request', respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=GestorActividades.uri,
+                                  msgcnt=mss_cnt)
     else:
-        # Obtenemos la performativa
-        perf = msgdic['performative']
+        # Busca en el directorio un agente de vuelos
+        res_graph = directory_search(DSO.TravelServiceAgent)
 
-        if perf != ACL.request:
-            # Si no es un request, respondemos que no hemos entendido el mensaje
-            gr = build_message(Graph(), ACL['not-understood'], sender=GestorActividades.uri, msgcnt=mss_cnt)
-        else:
-            # Extraemos el objeto del contenido que ha de ser una accion de la ontologia de acciones del agente
-            # de registro
+        # Obtiene la dirección del agente en la respuesta
+        msg = res_graph.value(predicate=RDF.type, object=ACL.FipaAclMessage)
+        content = res_graph.value(subject=msg, predicate=ACL.content)
+        agn_addr = res_graph.value(subject=content, predicate=DSO.Address)
+        agn_uri = res_graph.value(subject=content, predicate=DSO.Uri)
+        logger.info(agn_addr)
 
-            # Averiguamos el tipo de la accion
-            if 'content' in msgdic:
-                content = msgdic['content']
-                accion = gm.value(subject=content, predicate=RDF.type)
+        # Envía una mensaje de tipo ACL.request al agente de información de vuelos
+        res_graph = infoagent_search(agn_addr, agn_uri, req_graph)
 
-            if accion == DSO.SolverAgent:
-                # Buscamos en el directorio
-                # un agente de hoteles
-                gmess = directory_search_message(DSO.TravelServiceAgent)
-
-                # Obtenemos la direccion del agente de la respuesta
-                # No hacemos ninguna comprobacion sobre si es un mensaje valido
-                msg = gmess.value(predicate=RDF.type, object=ACL.FipaAclMessage)
-                content = gmess.value(subject=msg, predicate=ACL.content)
-                ragn_addr = gmess.value(subject=content, predicate=DSO.Address)
-                ragn_uri = gmess.value(subject=content, predicate=DSO.Uri)
-
-                gr = resolverPlan(ragn_addr, ragn_uri, gm)
-            else:
-                gr = build_message(Graph(),
-                                   ACL['not-understood'],
-                                   sender=GestorActividades.uri,
-                                   msgcnt=mss_cnt)
-            
+        res_graph = build_message(res_graph,
+                                  ACL["confirm"],
+                                  sender=GestorActividades.uri,
+                                  msgcnt=mss_cnt)
             
     mss_cnt += 1
 
     logger.info('Respondemos a la peticion')
 
-    return gr.serialize(format='xml')
+    return res_graph.serialize(format='xml')
 
 
 @app.route("/Stop")
@@ -204,7 +192,7 @@ def tidyup():
     """
     pass
 
-def directory_search_message(type):
+def directory_search(agent_type):
     """
     Busca en el servicio de registro mandando un
     mensaje de request con una accion Search del servicio de directorio
@@ -214,97 +202,71 @@ def directory_search_message(type):
     :return:
     """
     global mss_cnt
-    logger.info('Buscamos en el servicio de registro')
+    logger.info("Busca en el servicio de directorio un agente del tipo 'TravelServiceAgent'.")
 
-    gmess = Graph()
+    msg_graph = Graph()
 
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    reg_obj = agn[GestorActividades.name + '-search']
-    gmess.add((reg_obj, RDF.type, DSO.Search))
-    gmess.add((reg_obj, DSO.AgentType, type))
+    # Vinculamos los espacios de nombres que usaremos para construir el mensaje de búsqueda
+    msg_graph.bind("rdf", RDF)
+    msg_graph.bind("dso", DSO)
 
-    msg = build_message(gmess, perf=ACL.request,
+    obj = agn["GestorActividades-Search"]
+    msg_graph.add((obj, RDF.type, DSO.Search))
+    msg_graph.add((obj, DSO.AgentType, agent_type))
+
+    msg = build_message(msg_graph, perf=ACL.request,
                         sender=GestorActividades.uri,
                         receiver=DirectoryAgent.uri,
-                        content=reg_obj,
+                        content=obj,
                         msgcnt=mss_cnt)
-    gr = send_message(msg, DirectoryAgent.address)
+    res_graph = send_message(msg, DirectoryAgent.address)
     mss_cnt += 1
     logger.info('Recibimos informacion del agente')
 
-    return gr
+    return res_graph
 
 
-def agentbehavior1(cola):
+def infoagent_search(agn_addr, agn_uri, req_graph):
     """
-    Un comportamiento del agente
-    :return:
+    Hace una petición de búsqueda al agente de información de actividades (con sus respectivas restricciones) y obtiene
+    el resultado. Para ello manda un mensaje de tipo ACL.request con una acción Search del agente de información.
     """
-
-def resolverPlan(addr, ragn_uri, gm):
-    peticion = myns_pet["SolicitarSeleccionActividades"]
-
-    ciudadDestino = gm.value(subject= peticion, predicate= myns_atr.ciudadDestino)
-    dataIda = gm.value(subject= peticion, predicate= myns_atr.dataIda)
-    dataVuelta = gm.value(subject= peticion, predicate= myns_atr.dataVuelta)
-    precioHotel = gm.value(subject= peticion, predicate= myns_atr.precioHotel)
-    estrellas = gm.value(subject= peticion, predicate= myns_atr.estrellas)
-    roomQuantity = gm.value(subject= peticion, predicate= myns_atr.roomQuantity)
-    adults = gm.value(subject= peticion, predicate= myns_atr.adults)
-    radius = gm.value(subject= peticion, predicate= myns_atr.radius)
-            
-    gr = build_message(getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius),
-                        ACL['confirm'],
-                        sender=GestorActividades.uri,
-                        msgcnt=mss_cnt,
-                        receiver=ragn_uri, 
-                    )
-    return gr
-
-def getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius):
-
-    logger.info('Iniciamos busqueda en agente de informacion')
-
     global mss_cnt
 
-    # Graph para buscador
-    gmess = Graph()
-    gmess.bind('myns_pet', myns_pet)
-    gmess.bind('myns_atr', myns_atr)
-    
-    busqueda = myns_pet["ConsultarOpcionesActividades"]
+    logger.info("Hacemos una petición al servicio de información de actividades.")
 
-    gmess.add((busqueda, myns_par.ciudadDestino, Literal(ciudadDestino)))
-    gmess.add((busqueda, myns_par.dataIda, Literal(dataIda)))
-    gmess.add((busqueda, myns_par.dataVuelta, Literal(dataVuelta)))
-    gmess.add((busqueda, myns_par.precioHotel, Literal(precioHotel)))      
-    gmess.add((busqueda, myns_par.estrellas, Literal(estrellas)))
-    gmess.add((busqueda, myns_par.roomQuantity, Literal(roomQuantity)))
-    gmess.add((busqueda, myns_par.adults, Literal(adults)))
-    gmess.add((busqueda, myns_par.radius, Literal(radius)))
+    # Extramos del grafo de petición el valor de los campos 
+    selection_req = agn["AgenteUnificador-SeleccionActividades"]
+    ciudadDestino = req_graph.value(subject= selection_req, predicate= agn.ciudadDestino)
+    radius = req_graph.value(subject= selection_req, predicate= agn.radius)
 
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    req_obj = agn[GestorActividades.name + '-InfoAgent']
-    gmess.add((req_obj, RDF.type, DSO.InfoAgent))
-    gmess.add((req_obj, DSO.AgentType, DSO.TravelServiceAgent))
-    
+    msg_graph = Graph()
 
-    msg = build_message(gmess, perf=ACL.request,
-                      sender=GestorActividades.uri,
-                      receiver=ragn_uri,
-                      content=req_obj,
-                      msgcnt=mss_cnt)
+    # Supuesta ontología de acciones de agentes de información
+    IAA = Namespace('IAActions')
 
-    gr = send_message(msg, addr)
-    
+    # Vinculamos los espacios de nombres que usaremos para construir el mensaje de petición
+    msg_graph.bind("rdf", RDF)
+    msg_graph.bind("iaa", IAA)
+
+    search_req = agn["GestorActividades-InfoSearch"]
+    msg_graph.add((search_req, RDF.type, IAA.TravelServiceAgent))
+    msg_graph.add((search_req, agn.ciudadDestino, Literal(ciudadDestino)))
+    msg_graph.add((search_req, agn.radius, Literal(radius)))
+
+    msg = build_message(msg_graph,
+                        perf=ACL.request,
+                        sender=GestorActividades.uri,
+                        receiver=agn_uri,
+                        content=search_req,
+                        msgcnt=mss_cnt)
+    logger.info(agn_addr)
+    res_graph = send_message(msg, agn_addr)
+
     mss_cnt += 1
-
     logger.info('Actividades recibidas')
-    
-    return gr
 
+    return res_graph
 
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
