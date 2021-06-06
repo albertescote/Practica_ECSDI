@@ -103,7 +103,7 @@ def registrar_hoteles():
     :return:
     """
 
-    logger.info('Nos registramos como servicio de hoteles')
+    logger.info('Nos registramos')
 
     global mss_cnt
 
@@ -150,6 +150,7 @@ def comunicacion():
     global mss_cnt
 
     logger.info('Peticion de alojamiento recibida')
+    
     # Extraemos el mensaje y creamos un grafo con él
     message = request.args["content"]
     msg_graph = Graph()
@@ -217,13 +218,12 @@ def infoHoteles(msg_graph, msgdic):
     producirse un error, la función retorna un mensaje FIPA-ACL de tipo 'failure'.
     """
     res_graph = Graph()
-
     # Extraemos los campos de búsqueda del contenido del mensaje, una vez que este está expresado como un grafo
     search_req = agn["GestorAlojamiento-InfoSearch"]
     destinationCity = msg_graph.value(subject=search_req, predicate=agn.destinationCity)
     destinationIATA = convert_to_IATA(str(destinationCity))
-    departureDate = msg_graph.value(subject=search_req, predicate=agn.departureDate)
-    comebackDate = msg_graph.value(subject=search_req, predicate=agn.comebackDate)
+    checkInDate = msg_graph.value(subject=search_req, predicate=agn.departureDate)
+    checkOutDate = msg_graph.value(subject=search_req, predicate=agn.comebackDate)
     hotelBudget = msg_graph.value(subject=search_req, predicate=agn.hotelBudget)
     ratings = msg_graph.value(subject=search_req, predicate=agn.ratings)
     roomQuantity = msg_graph.value(subject=search_req, predicate=agn.roomQuantity)
@@ -238,7 +238,9 @@ def infoHoteles(msg_graph, msgdic):
     try:
         # Hace la búsqueda a la API Amadeus a través de su librería y guarda el resultado en formato JSON (accesible
         # como si fuera un diccionario Python)
-        response = amadeus.shopping.hotel_offers.get(cityCode=str(destinationIATA), 
+        response = amadeus.shopping.hotel_offers.get(cityCode=str(destinationIATA),
+                                                    checkInDate=str(checkInDate),
+                                                    checkOutDate=str(checkOutDate),
                                                     roomQuantity=int(roomQuantity),
                                                     adults=int(adults),
                                                     radius=int(radius),
@@ -247,14 +249,16 @@ def infoHoteles(msg_graph, msgdic):
                                                     currency='EUR',
                                                     view='LIGHT',
                                                     )
-        
         h = response.data[0]
         hotel = h['hotel']['hotelId']
         address = h['hotel']['address']['lines'][0] + ', ' + h['hotel']['address']['cityName'] + ', ' + h['hotel']['address']['postalCode']
+        price = h['offers'][0]['price']['total'] + '€'
+
         hotel_obj = agn[hotel]
         res_graph.add((hotel_obj, agn.esUn, agn.Hotel))
         res_graph.add((hotel_obj, agn.Nombre, Literal(h['hotel']['name'])))
         res_graph.add((hotel_obj, agn.Direccion, Literal(address)))
+        res_graph.add((hotel_obj, agn.Precio, Literal(price)))
 
         res_graph = build_message(res_graph,
                                     ACL["inform"],
