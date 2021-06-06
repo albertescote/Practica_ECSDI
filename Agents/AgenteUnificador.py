@@ -183,7 +183,7 @@ def peticionPlan():
             alojamiento = next(gsearch)[0]
             nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Nombre)
             direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Direccion)
-            precio = graph_aloj.value(subject=alojamiento, predicate=agn.Precio)
+            precio_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Precio)
 
             # TODO: Coger y mostrar la información de más de una actividad
             gsearch = graph_act.triples((None, agn.esUn, agn.activity))
@@ -204,6 +204,7 @@ def peticionPlan():
                 "precioBillete": precio_billete,
                 "nombreAloj": nombre_aloj,
                 "direccionAloj": direccion_aloj,
+                "precioAloj": precio_aloj,
                 "nombreActividad": nombre_act
             }
 
