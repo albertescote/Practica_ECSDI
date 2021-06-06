@@ -171,6 +171,7 @@ def peticionPlan():
         else:
             gsearch = graph_trans.triples((None, agn.esUn, agn.Billete))
             billete = next(gsearch)[0]
+
             id_billete = graph_trans.value(subject=billete, predicate=agn.Id)
             hora_salida_billete = graph_trans.value(subject=billete, predicate=agn.DiaHoraSalida)
             hora_llegada_billete = graph_trans.value(subject=billete, predicate=agn.DiaHoraLlegada)
@@ -182,6 +183,7 @@ def peticionPlan():
             alojamiento = next(gsearch)[0]
             nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Nombre)
             direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Direccion)
+            precio = graph_aloj.value(subject=alojamiento, predicate=agn.Precio)
 
             # TODO: Coger y mostrar la información de más de una actividad
             gsearch = graph_act.triples((None, agn.esUn, agn.activity))
@@ -204,7 +206,7 @@ def peticionPlan():
                 "direccionAloj": direccion_aloj,
                 "nombreActividad": nombre_act
             }
-            logger.info(displayData)
+
     except Exception as e:
         logger.error(str(e))
         displayData = {

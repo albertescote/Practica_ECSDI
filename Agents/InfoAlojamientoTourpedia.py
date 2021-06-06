@@ -41,11 +41,6 @@ __author__ = 'javier'
 
 TOURPEDIA_END_POINT = 'http://tour-pedia.org/api/'
 
-amadeus = Client(
-    client_id=AMADEUS_KEY,
-    client_secret=AMADEUS_SECRET
-)
-
 # Definimos los parametros de la linea de comandos
 parser = argparse.ArgumentParser()
 parser.add_argument('--open', help="Define si el servidor est abierto al exterior o no", action='store_true',
@@ -91,17 +86,12 @@ if not args.verbose:
     log.setLevel(logging.ERROR)
 
 agn = Namespace("http://www.agentes.org#")
-myns = Namespace("http://www.agentes.org/")
-myns_pet = Namespace("http://www.agentes.org/peticiones/")
-myns_atr = Namespace("http://www.agentes.org/atributos/")
-myns_par = Namespace("http://my.namespace.org/parametros/")
-myns_hot = Namespace("http://my.namespace.org/hoteles/")
 
 # Contador de mensajes
 mss_cnt = 0
 
-InfoTourpedia = Agent('InfoTourpedia',
-                       agn.InfoTourpedia,
+InfoAlojamientoTourpedia = Agent('InfoAlojamientoTourpedia',
+                       agn.InfoAlojamientoTourpedia,
                        'http://%s:%d/comm' % (hostaddr, port),
                        'http://%s:%d/Stop' % (hostaddr, port))
 
@@ -112,14 +102,9 @@ DirectoryAgent = Agent('DirectoryAgent',
                        'http://%s:%d/Stop' % (dhostname, dport))
 
 # Global triplestore graph
-dsgraph = Graph()
+igraph = Graph()
 
 # Vinculamos todos los espacios de nombre a utilizar
-dsgraph.bind('acl', ACL)
-dsgraph.bind('rdf', RDF)
-dsgraph.bind('rdfs', RDFS)
-dsgraph.bind('foaf', FOAF)
-dsgraph.bind('dso', DSO)
 
 cola1 = Queue()
 
@@ -147,17 +132,17 @@ def register_message():
     # Construimos el mensaje de registro
     gmess.bind('foaf', FOAF)
     gmess.bind('dso', DSO)
-    reg_obj = agn[InfoTourpedia.name + '-Register']
+    reg_obj = agn[InfoAlojamientoTourpedia.name + '-Register']
     gmess.add((reg_obj, RDF.type, DSO.Register))
-    gmess.add((reg_obj, DSO.Uri, InfoTourpedia.uri))
-    gmess.add((reg_obj, FOAF.name, Literal(InfoTourpedia.name)))
-    gmess.add((reg_obj, DSO.Address, Literal(InfoTourpedia.address)))
+    gmess.add((reg_obj, DSO.Uri, InfoAlojamientoTourpedia.uri))
+    gmess.add((reg_obj, FOAF.name, Literal(InfoAlojamientoTourpedia.name)))
+    gmess.add((reg_obj, DSO.Address, Literal(InfoAlojamientoTourpedia.address)))
     gmess.add((reg_obj, DSO.AgentType, DSO.HotelsAgent))
 
     # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
     gr = send_message(
         build_message(gmess, perf=ACL.request,
-                      sender=InfoTourpedia.uri,
+                      sender=InfoAlojamientoTourpedia.uri,
                       receiver=DirectoryAgent.uri,
                       content=reg_obj,
                       msgcnt=mss_cnt),
@@ -174,54 +159,46 @@ def hello():
 @app.route("/comm")
 def comunicacion():
     """
-    Entrypoint de comunicacion
+    Entry point de comunicación con el agente.
+
+    Retorna un objeto que representa el resultado de una búsqueda de alojamiento o actividades.
+
+    Asumimos que se reciben siempre acciones correctas, que se refieren a lo que puede hacer el agente, y que las
+    acciones se reciben en un mensaje de tipo ACL.request.
     """
-    global dsgraph
+    global igraph
     global mss_cnt
 
+    logger.info('Peticion de alojamiento recibida')
+    
+    # Extraemos el mensaje y creamos un grafo con él
+    message = request.args["content"]
+    msg_graph = Graph()
+    msg_graph.parse(data=message)
 
-    # Extraemos el mensaje y creamos un grafo con el
-    message = request.args['content']
-    gm = Graph()
-    gm.parse(data=message)
+    msgdic = get_message_properties(msg_graph)
 
-    msgdic = get_message_properties(gm)
-
-    # Comprobamos que sea un mensaje FIPA ACL
-    if msgdic is None:
-        # Si no es, respondemos que no hemos entendido el mensaje
-        gr = build_message(Graph(), ACL['not-understood'], sender=InfoTourpedia.uri, msgcnt=mss_cnt)
+    # Comprobamos que sea un mensaje FIPA-ACL
+    if not msgdic:
+        # Si no lo es, respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=InfoAlojamientoTourpedia.uri,
+                                  msgcnt=mss_cnt)
+    elif msgdic["performative"] != ACL.request:
+        # Si la performativa no es de tipo 'request', respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=InfoAlojamientoTourpedia.uri,
+                                  msgcnt=mss_cnt)
     else:
-        # Obtenemos la performativa
-        perf = msgdic['performative']
+        res_graph = infoHoteles(msg_graph, msgdic)
 
-        if perf != ACL.request:
-            # Si no es un request, respondemos que no hemos entendido el mensaje
-            gr = build_message(Graph(), ACL['not-understood'], sender=InfoTourpedia.uri, msgcnt=mss_cnt)
-        else:
-            # Extraemos el objeto del contenido que ha de ser una accion de la ontologia de acciones del agente
-            # de registro
-
-            # Averiguamos el tipo de la accion
-            if 'content' in msgdic:
-                content = msgdic['content']
-                accion = gm.value(subject=content, predicate=RDF.type)
-                agent = gm.value(subject=content, predicate=DSO.AgentType)
-
-            if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
-                logger.info('Peticion de alojamiento recibida')
-                gr = infoHoteles(gm, msgdic)
-
-            else:
-                gr = build_message(Graph(),
-                                   ACL['not-understood'],
-                                   sender=InfoTourpedia.uri,
-                                   msgcnt=mss_cnt)    
     mss_cnt += 1
 
     logger.info('Respondemos a la peticion')
 
-    return gr.serialize(format='xml')
+    return res_graph.serialize(format="xml")
 
 
 @app.route("/Stop")
@@ -254,17 +231,9 @@ def agentbehavior1():
     pass
 
 def infoHoteles(gm, msgdic):
-    busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
+    busqueda = agn["ConsultarOpcionesAlojamiento"]
 
-    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
-    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
-    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
-    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
-    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
-    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
-    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
-
+    ciudadDestino = gm.value(subject= busqueda, predicate= agn.ciudadDestino)
 
     # Obtenemos un atracciones en Bercelona que tengan Museu en el nombre
     gr = Graph()
@@ -273,37 +242,28 @@ def infoHoteles(gm, msgdic):
                     params={'location': ciudadDestino, 'category': 'accommodation', 'name' : 'Hotel'})
 
         hoteles = response.json()
-                
-        gr.bind('myns_hot', myns_hot)
-
-        #for h in hoteles:
-        #    hotel = h['id']
-        #    r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
-        #    detalles_hotel = r.json()
-        #    hotel_obj = myns_hot[hotel]
-        #    gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-        #    gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_hotel['name'])))
-
         h = hoteles[0]
         hotelID = h['id']
         r = requests.get(h['details']) # usamos la llamada a la API ya codificada en el atributo
         detalles_hotel = r.json()
-        hotel_obj = myns_hot[hotelID]
-        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-        gr.add((hotel_obj, myns_atr.nombre, Literal(detalles_hotel['name'])))
-        gr.add((hotel_obj, myns_atr.direccion, Literal(h['address'])))
+        hotel_obj = agn[hotelID]
+        gr.add((hotel_obj, agn.esUn, agn.Hotel))
+        gr.add((hotel_obj, agn.Nombre, Literal(detalles_hotel['name'])))
+        gr.add((hotel_obj, agn.Direccion, Literal(h['address'])))
+        gr.add((hotel_obj, agn.Precio, Literal('Not available')))
+
         # Aqui realizariamos lo que pide la accion
         # Por ahora simplemente retornamos un Inform-done
         gr = build_message(gr,
                         ACL['confirm'],
-                        sender=InfoTourpedia.uri,
+                        sender=InfoAlojamientoTourpedia.uri,
                         msgcnt=mss_cnt,
                         receiver=msgdic['sender'], )
     except:
         logger.info('Location not found on database')
         gr = build_message(gr,
                             ACL['failure'],
-                            sender=InfoTourpedia.uri,
+                            sender=InfoAlojamientoTourpedia.uri,
                             msgcnt=mss_cnt,
                             receiver=msgdic['sender'], )
     finally:
