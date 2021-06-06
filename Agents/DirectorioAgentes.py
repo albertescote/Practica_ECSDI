@@ -81,9 +81,6 @@ app = Flask(__name__)
 # Contador de mensajes
 mss_cnt = 0
 
-# Cola de comunicación entre procesos
-queue1 = Queue()
-
 
 # ENTRY POINTS
 @app.route("/Register")
@@ -226,35 +223,10 @@ def tidyup():
     """
     Acciones previas a parar el agente.
     """
-    global queue1
-    queue1.put(0)
-
-
-def agentbehaviour1(queue):
-    """
-    Esta función se ejecuta en paralelo al servidor Flask. Simplemente espera mensajes de una cola y los imprime
-    por pantalla hasta que llega un 0.
-    """
-    fin = False
-    while not fin:
-        while queue.empty():
-            pass
-        v = queue.get()
-        if v == 0:
-            print(v)
-            return 0
-        else:
-            print(v)
+    pass
 
 
 if __name__ == "__main__":
-    # Ponemos en marcha los behaviours como procesos
-    ab1 = Process(target=agentbehaviour1, args=(queue1,))
-    ab1.start()
-
     # Ponemos en marcha el servidor Flask
     app.run(host=hostname, port=port)
-
-    # Espera hasta que el proceso hijo termine
-    ab1.join()
     logger.info("The end.")
