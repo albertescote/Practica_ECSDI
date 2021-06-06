@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Agente de información de alojamiento y actividades. Se registra en el directorio de agentes como ello.
+Agente de información de actividades. Se registra en el directorio de agentes como ello.
 """
 
 from AgentUtil.Coordenadas import COORDENADAS
@@ -72,11 +72,11 @@ if not args.verbose:
 
 agn = Namespace("http://www.agentes.org#")
 
-# Datos del agente de información de transporte
+# Datos del agente de información de actividades
 InfoActividades = Agent("InfoActividades",
-                  agn.InfoActividades,
-                  "http://%s:%d/comm" % (hostaddr, port),
-                  "http://%s:%d/Stop" % (hostaddr, port))
+                        agn.InfoActividades,
+                        "http://%s:%d/comm" % (hostaddr, port),
+                        "http://%s:%d/Stop" % (hostaddr, port))
 
 # Datos del agente directorio
 DirectoryAgent = Agent("DirectoryAgent",
@@ -93,60 +93,14 @@ app = Flask(__name__)
 # Contador de mensajes
 mss_cnt = 0
 
-# Cola de comunicación entre procesos
-queue1 = Queue()
 
-def registrar_actividades():
-    """
-    Envia un mensaje de registro al servicio de registro
-    usando una performativa Request y una accion Register del
-    servicio de directorio
-    :param gmess:
-    :return:
-    """
-
-    logger.info('Nos registramos como servicio de actividades')
-
-    global mss_cnt
-
-    msg_graph = Graph()
-
-    # Vinculamos los espacios de nombres que usaremos para construir el mensaje de registro
-    msg_graph.bind("rdf", RDF)
-    msg_graph.bind("foaf", FOAF)
-    msg_graph.bind("dso", DSO)
-
-    reg_obj = agn[InfoActividades.name + '-Register']
-    msg_graph.add((reg_obj, RDF.type, DSO.Register))
-    msg_graph.add((reg_obj, DSO.Uri, InfoActividades.uri))
-    msg_graph.add((reg_obj, FOAF.name, Literal(InfoActividades.name)))
-    msg_graph.add((reg_obj, DSO.Address, Literal(InfoActividades.address)))
-    msg_graph.add((reg_obj, DSO.AgentType, DSO.TravelServiceAgent))
-
-    # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
-    gr = send_message(
-        build_message(msg_graph, 
-                      perf=ACL.request,
-                      sender=InfoActividades.uri,
-                      receiver=DirectoryAgent.uri,
-                      content=reg_obj,
-                      msgcnt=mss_cnt),
-        DirectoryAgent.address)
-    mss_cnt += 1
-
-    return gr
-
-@app.route("/")
-def hello():
-    return "Agente InfoAmadeus en marcha!"
-
-
+# ENTRY POINTS
 @app.route("/comm")
 def comunicacion():
     """
     Entry point de comunicación con el agente.
 
-    Retorna un objeto que representa el resultado de una búsqueda de alojamiento o actividades.
+    Retorna un objeto que representa el resultado de una búsqueda de actividades.
 
     Asumimos que se reciben siempre acciones correctas, que se refieren a lo que puede hacer el agente, y que las
     acciones se reciben en un mensaje de tipo ACL.request.
@@ -154,7 +108,7 @@ def comunicacion():
     global igraph
     global mss_cnt
 
-    logger.info('Peticion de actividades recibida')
+    logger.info("Petición de información de actividades recibida.")
     # Extraemos el mensaje y creamos un grafo con él
     message = request.args["content"]
     msg_graph = Graph()
@@ -180,16 +134,15 @@ def comunicacion():
 
     mss_cnt += 1
 
-    logger.info('Respondemos a la peticion')
+    logger.info("El agente de información de actividades responde a la petición.")
 
     return res_graph.serialize(format="xml")
+
 
 @app.route("/Stop")
 def stop():
     """
-    Entrypoint que para el agente
-
-    :return:
+    Entrada que para el agente.
     """
     tidyup()
     shutdown_server()
@@ -198,28 +151,16 @@ def stop():
 
 def tidyup():
     """
-    Acciones previas a parar el agente
-
+    Acciones previas a parar el agente.
     """
     pass
 
 
-def agentbehavior1():
-    """
-    Un comportamiento del agente
-    :return:
-    """
-    # Registramos el agente
-    try:
-        gr = registrar_actividades()
-    except:
-        logger.info("DirectoryAgent no localizado")
-
 def infoActividades(msg_graph, msgdic):
     """
-    Devuelve un mensaje en formato FIPA-ACL, de tipo 'inform', que contiene el resultado de la búsqueda de actividades hecha
-    en la API Amadeus con los criterio de búsqueda que hay en el grafo msg_graph, pasado como parámetro. En caso de
-    producirse un error, la función retorna un mensaje FIPA-ACL de tipo 'failure'.
+    Devuelve un mensaje en formato FIPA-ACL, de tipo 'inform', que contiene el resultado de la búsqueda de actividades
+    hecha en la API Amadeus con los criterio de búsqueda que hay en el grafo msg_graph, pasado como parámetro. En caso
+    de producirse un error, la función retorna un mensaje FIPA-ACL de tipo 'failure'.
     """
     res_graph = Graph()
 
@@ -228,7 +169,7 @@ def infoActividades(msg_graph, msgdic):
 
     ciudadDestino = msg_graph.value(subject=search_req, predicate=agn.ciudadDestino)
     ciudadIATA = convert_to_IATA(str(ciudadDestino))
-    radius = msg_graph.value(subject= search_req, predicate= agn.radius)
+    radius = msg_graph.value(subject=search_req, predicate=agn.radius)
 
     amadeus = Client(
         client_id=AMADEUS_KEY,
@@ -239,8 +180,8 @@ def infoActividades(msg_graph, msgdic):
         # Hace la búsqueda a la API Amadeus a través de su librería y guarda el resultado en formato JSON (accesible
         # como si fuera un diccionario Python)   
         response = amadeus.shopping.activities.get(latitude=COORDENADAS[str(ciudadIATA)]['latitude'],
-                                                longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
-                                                radius=radius)
+                                                   longitude=COORDENADAS[str(ciudadIATA)]['longitude'],
+                                                   radius=radius)
 
         for activity in response.data:
             activity_obj = agn[activity['id']]
@@ -263,14 +204,50 @@ def infoActividades(msg_graph, msgdic):
     finally:
         return res_graph
 
+
+def registrar_actividades():
+    """
+    Envia un mensaje de registro al servicio de registro usando una performativa 'Request' con
+    una acción 'Register' del servicio de directorio.
+    """
+    global mss_cnt
+
+    logger.info("Registro agente información de actividades.")
+
+    msg_graph = Graph()
+
+    # Vinculamos los espacios de nombres que usaremos para construir el mensaje de registro
+    msg_graph.bind("rdf", RDF)
+    msg_graph.bind("foaf", FOAF)
+    msg_graph.bind("dso", DSO)
+
+    reg_obj = agn[InfoActividades.name + '-Register']
+    msg_graph.add((reg_obj, RDF.type, DSO.Register))
+    msg_graph.add((reg_obj, DSO.Uri, InfoActividades.uri))
+    msg_graph.add((reg_obj, FOAF.name, Literal(InfoActividades.name)))
+    msg_graph.add((reg_obj, DSO.Address, Literal(InfoActividades.address)))
+    msg_graph.add((reg_obj, DSO.AgentType, DSO.TravelServiceAgent))
+
+    # Lo metemos en un envoltorio FIPA-ACL y lo enviamos
+    gr = send_message(
+        build_message(msg_graph,
+                      perf=ACL.request,
+                      sender=InfoActividades.uri,
+                      receiver=DirectoryAgent.uri,
+                      content=reg_obj,
+                      msgcnt=mss_cnt),
+        DirectoryAgent.address)
+    mss_cnt += 1
+
+    return gr
+
+
 if __name__ == '__main__':
-    # Ponemos en marcha los behaviors
-    ab1 = Process(target=agentbehavior1)
-    ab1.start()
+    try:
+        gr = registrar_actividades()
+    except:
+        logger.info("DirectoryAgent no localizado.")
 
-    # Ponemos en marcha el servidor
+    # Ponemos en marcha el servidor Flask
     app.run(host=hostname, port=port)
-
-    # Esperamos a que acaben los behaviors
-    ab1.join()
     logger.info('The End')

@@ -65,11 +65,11 @@ if not args.verbose:
 
 agn = Namespace("http://www.agentes.org#")
 
-# Datos del agente gestor de transporte
+# Datos del agente gestor de alojamiento
 GestorAlojamiento = Agent("GestorAlojamiento",
-                         agn.GestorAlojamiento,
-                         "http://%s:%d/comm" % (hostaddr, port),
-                         "http://%s:%d/Stop" % (hostaddr, port))
+                          agn.GestorAlojamiento,
+                          "http://%s:%d/comm" % (hostaddr, port),
+                          "http://%s:%d/Stop" % (hostaddr, port))
 
 # Datos del agente directorio
 DirectoryAgent = Agent("DirectoryAgent",
@@ -87,14 +87,9 @@ app = Flask(__name__)
 mss_cnt = 0
 
 
-@app.route("/")
-def hello():
-    return "Agente alojamiento en marcha!"
-
-
+# ENTRY POINTS
 @app.route("/comm")
 def comunicacion():
-
     """
     Entry point de comunicación con el agente.
 
@@ -103,7 +98,7 @@ def comunicacion():
     global gagraph
     global mss_cnt
 
-    logger.info('Peticion de alojamiento recibida')
+    logger.info("Recibe petición de selección de alojamiento.")
 
     # Extraemos el mensaje y creamos un grafo con él
     message = request.args["content"]
@@ -144,16 +139,15 @@ def comunicacion():
                                   msgcnt=mss_cnt)
 
     mss_cnt += 1
-    logger.info('Respondemos a la peticion')
+    logger.info("Responde a la petición.")
 
     return res_graph.serialize(format='xml')
+
 
 @app.route("/Stop")
 def stop():
     """
-    Entrypoint que para el agente
-
-    :return:
+    Entrada que para el agente.
     """
     tidyup()
     shutdown_server()
@@ -162,10 +156,10 @@ def stop():
 
 def tidyup():
     """
-    Acciones previas a parar el agente
-
+    Acciones previas a parar el agente.
     """
     pass
+
 
 def directory_search(agent_type):
     """
@@ -174,7 +168,7 @@ def directory_search(agent_type):
     """
     global mss_cnt
 
-    logger.info('Buscamos en el servicio de registro')
+    logger.info("Busca en el servicio de directorio un agente del tipo 'HotelsAgent'.")
 
     msg_graph = Graph()
 
@@ -196,10 +190,10 @@ def directory_search(agent_type):
                              DirectoryAgent.address)
 
     mss_cnt += 1
-    logger.info('Recibimos informacion del agente')
-
+    logger.info("Recibe información de un agente del tipo 'HotelsAgent'.")
 
     return res_graph
+
 
 def infoagent_search(agn_addr, agn_uri, req_graph):
     """
@@ -208,7 +202,7 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
     """
     global mss_cnt
 
-    logger.info('Iniciamos busqueda en agente de informacion')
+    logger.info("Hace una petición al servicio de información de alojamiento.")
 
     # Extraemos del grafo de petición el valor de los campos
     selection_req = agn["AgenteUnificador-SeleccionAlojamiento"]
@@ -252,9 +246,10 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
     res_graph = send_message(msg, agn_addr)
 
     mss_cnt += 1
-    logger.info('Alojamientos recibidos')
+    logger.info("Recibe respuesta a la petición al servicio de información de alojamiento.")
 
     return res_graph
+
 
 if __name__ == '__main__':
     # Ponemos en marcha el servidor Flask
