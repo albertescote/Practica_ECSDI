@@ -11,19 +11,19 @@
         <h1> Datos del viaje </h1>
 		    <!-- INFORMACION DE LOS HOTELES --> 
         <div>
-          {% if hotelData.error == 0 %}
+          {% if displayData.error == 0 %}
             <h3> Transporte </h3>
-            <p> Ciudad origen: {{  hotelData.ciudadOrigen }} </p>
-            <p> Ciudad destino: {{  hotelData.ciudadDestino }} </p>
-            <p> Data ida: {{  hotelData.dataIda }} </p>
-            <p> Data vuelta: {{  hotelData.dataVuelta }} </p>
+            <p> Ciudad origen: {{  displayData.ciudadOrigen }} </p>
+            <p> Ciudad destino: {{  displayData.ciudadDestino }} </p>
+            <p> Fecha ida: {{  displayData.fechaIda }} </p>
+            <p> Fecha vuelta: {{  displayData.fechaVuelta }} </p>
             <h3> Hotel </h3>
-            <p> Nombre hotel: {{  hotelData.nombreHotel }} </p>
-            <p> Dirección hotel: {{  hotelData.direccion }} </p>
+            <p> Nombre hotel: {{  displayData.nombreHotel }} </p>
+            <p> Dirección hotel: {{  displayData.direccion }} </p>
             <h3> Actividades </h3>
-            <p> Nombre actividad: {{  hotelData.nombreActividad }} </p>
+            <p> Nombre actividad: {{  displayData.nombreActividad }} </p>
           {% else %}
-            <p> {{ hotelData.errorMessage }} </p>
+            <p> {{ displayData.errorMessage }} </p>
           {% endif %}
         </div>
       </div>

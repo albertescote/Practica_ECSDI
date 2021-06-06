@@ -5,23 +5,77 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>ECSDI</title>
+    <style>
+        /* No es la manera más elegante de alinear los campos del formulario. No es 'responsive'. */
+        label {
+            display: inline-block;
+            width: 180px;
+            text-align: right;
+        }
+    </style>
   </head>
   <body>
-      <div align="center">
-        <h1>Planificador de viajes</h1>
-        <form method="POST">
-            <p>Ciudad origen:</p><input name="ciudadOrigen" required>
-            <p>Ciudad destino:</p><input name="ciudadDestino" required>
-            <p>Data ida (Format YYYY-MM-DD):</p><input name="dataIda" required>
-            <p>Data vuelta (Format YYYY-MM-DD):</p><input name="dataVuelta" required>
-            <p>Precio hotel:</p><input name="precioHotel" required>
-            <p>Estrellas hotel:</p><input name="estrellas" required>
-            <p>Numero habitaciones:</p><input name="roomQuantity" required>
-            <p>Adultos:</p><input name="adults" required>
-            <p>Distancia del centro(KM):</p><input name="radius" required>
-            <p>Presupuesto:</p><input name="budget" required>
-            <input type="submit">
-        </form>
-      </div>
+    <h1>Planificador de viajes</h1>
+    <form method="POST">
+        <h2>General</h2>
+            <p><label for="ciudadOrigen">Ciudad origen:</label>
+            <select id="ciudadOrigen" name="ciudadOrigen" required>
+                <option value="Barcelona" selected>Barcelona</option>
+                <option value="Paris">Paris</option>
+                <option value="Amsterdam">Amsterdam</option>
+                <option value="Berlin">Berlin</option>
+                <option value="Dubai">Dubai</option>
+                <option value="London">London</option>
+                <option value="Rome">Rome</option>
+            </select></p>
+
+            <p><label for="ciudadDestino">Ciudad destino:</label>
+            <select id="ciudadDestino" name="ciudadDestino" required>
+                <option value="Barcelona">Barcelona</option>
+                <option value="Paris" selected>Paris</option>
+                <option value="Amsterdam">Amsterdam</option>
+                <option value="Berlin">Berlin</option>
+                <option value="Dubai">Dubai</option>
+                <option value="London">London</option>
+                <option value="Rome">Rome</option>
+            </select></p>
+
+            <p><label for="fechaIda">Fecha ida:</label>
+            <input id="fechaIda" name="fechaIda" placeholder="AAAA-MM-DD" type="text" required>
+            </p>
+
+            <p><label for="fechaVuelta">Fecha vuelta:</label>
+            <input id="fechaVuelta" name="fechaVuelta" placeholder="AAAA-MM-DD" type="text" required>
+            </p>
+
+        <h2>Vuelo</h2>
+            <p><label for="presupuestoVuelo">Presupuesto:</label>
+            <input id="presupuestoVuelo" name="presupuestoVuelo" type="text" required>
+            </p>
+
+        <h2>Alojamiento</h2>
+            <p><label for="npersonas">Número personas:</label>
+            <input id="npersonas" name="npersonas" type="text" required>
+            </p>
+
+            <p><label for="nhabitaciones">Número habitaciones:</label>
+            <input id="nhabitaciones" name="nhabitaciones" type="text" required>
+            </p>
+
+            <p><label for="estrellas">Estrellas:</label>
+            <input id="estrellas" name="estrellas" type="text" required>
+            </p>
+
+            <p><label for="dcentro">Distancia del centro (Km):</label>
+            <input id="dcentro" name="dcentro" type="text" required>
+            </p>
+
+            <p><label for="presupuestoAloj">Presupuesto:</label>
+            <input id="presupuestoAloj" name="presupuestoAloj" type="text" required>
+            </p>
+
+        <br>
+        <p><input id="submit_btn" type="submit"></p>
+    </form>
   </body>
 </html>

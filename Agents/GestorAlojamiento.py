@@ -267,9 +267,9 @@ def resolverPlan(addr, ragn_uri, gm):
 
     gres = getInfoHotels(addr, ragn_uri, ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius)
     msgdic = get_message_properties(gres)
-    perf = msgdic['performative'] 
+    #perf = msgdic['performative']
     gr = build_message(gres,
-                        perf,
+                        ACL.confirm,
                         sender=GestorAlojamiento.uri,
                         msgcnt=mss_cnt,
                         receiver=ragn_uri, 
