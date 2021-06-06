@@ -130,47 +130,43 @@ def peticionPlan():
         p1 = Process(target=pedirSeleccionAlojamiento, args=(
             ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
             return_dic))
-        p2 = Process(target=pedirSeleccionActividades, args=(
-            ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
-            return_dic))
+        #p2 = Process(target=pedirSeleccionActividades, args=(
+        #    ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
+        #    return_dic))
         p3 = Process(target=pedirSeleccionTransporte,
                      args=(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta, presupuestoVuelo, return_dic))
 
         # Ejecuta los procesos
         p1.start()
-        p2.start()
+        #p2.start()
         p3.start()
 
         # Espera hasta que los procesos hijo acaben
         p1.join()
-        p2.join()
+        #p2.join()
         p3.join()
 
         # Extraemos por separado, del objeto compartido por los procesos 'return_dic', los grafos con los resultados de
         # la selección de transporte, alojamiento y actividades.
         graph_trans = return_dic["transporte"]
         graph_aloj = return_dic["alojamiento"]
-        graph_act = return_dic["actividades"]
+        #graph_act = return_dic["actividades"]
 
         # Obtenemos la performativa de los mensajes en los tres casos
         msgdic_trans = get_message_properties(graph_trans)
         msgdic_aloj = get_message_properties(graph_aloj)
-        msgdic_act = get_message_properties(graph_act)
+        #msgdic_act = get_message_properties(graph_act)
 
         perf_trans = msgdic_trans["performative"]
         perf_aloj = msgdic_aloj["performative"]
-        perf_act = msgdic_act["performative"]
+        #perf_act = msgdic_act["performative"]
 
-        print("perf_trans", perf_trans)
-        print("perf_aloj", perf_aloj)
-        print("perf_act", perf_act)
-
-        if perf_trans == ACL.failure or perf_aloj == ACL.failure or perf_act == ACL.failure:
+        if perf_trans == ACL.failure or perf_aloj == ACL.failure:
             displayData = {
                 "error": 1,
                 "errorMessage": "Parámetros de entrada no válidos."
             }
-        elif perf_trans == ACL.cancel or perf_aloj == ACL.cancel or perf_act == ACL.cancel:
+        elif perf_trans == ACL.cancel or perf_aloj == ACL.cancel:
             displayData = {
                 "error": 1,
                 "errorMessage": "No se ha encontrado ningún agente de información."
@@ -179,15 +175,15 @@ def peticionPlan():
             gsearch = graph_trans.triples((None, agn.esUn, agn.Billete))
             billete = next(gsearch)[0]
 
-            gsearch = graph_aloj.triples((None, myns_atr.esUn, myns.hotel))
+            gsearch = graph_aloj.triples((None, agn.esUn, agn.Hotel))
             alojamiento = next(gsearch)[0]
-            nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.nombre)
-            direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.direccion)
+            nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Nombre)
+            direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.Direccion)
 
             # TODO: Coger y mostrar la información de más de una actividad
-            gsearch = graph_act.triples((None, myns_atr.esUn, myns.activity))
-            actividad = next(gsearch)[0]
-            nombre_act = graph_act.value(subject=actividad, predicate=myns_atr.nombre)
+            #gsearch = graph_act.triples((None, myns_atr.esUn, myns.activity))
+            #actividad = next(gsearch)[0]
+            #nombre_act = graph_act.value(subject=actividad, predicate=myns_atr.nombre)
 
             displayData = {
                 'error': 0,
@@ -196,8 +192,7 @@ def peticionPlan():
                 'fechaIda': fechaIda,
                 'fechaVuelta': fechaVuelta,
                 'nombreHotel': nombre_aloj,
-                'direccion': direccion_aloj,
-                'nombreActividad': nombre_act
+                'direccion': direccion_aloj
             }
     except Exception as e:
         displayData = {
@@ -258,9 +253,6 @@ def pedirSeleccionTransporte(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta,
                                            content=selection_req,
                                            msgcnt=mss_cnt), GestorTransporte.address)
 
-    for s, p, o in res_graph:
-        print(s, p, o)
-
     mss_cnt += 1
 
     return_dic["transporte"] = res_graph
@@ -268,48 +260,40 @@ def pedirSeleccionTransporte(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta,
     logger.info("Selección de transporte recibida.")
 
 
-def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius,
-                              return_dic):
+def pedirSeleccionAlojamiento(ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
+            return_dic):
     global mss_cnt
+
     logger.info('Iniciamos busqueda de alojamiento')
 
-    gmess = Graph()
-    gmess.bind('myns_pet', myns_pet)
-    gmess.bind('myns_atr', myns_atr)
+    msg_graph = Graph()
 
-    peticion = myns_pet["SolicitarSelecciónAlojamiento"]
+    # Vinculamos todos los espacios de nombres a utilizar
+    msg_graph.bind("agn", agn)
 
-    gmess.add((peticion, myns_atr.ciudadDestino, Literal(ciudadDestino)))
-    gmess.add((peticion, myns_atr.dataIda, Literal(dataIda)))
-    gmess.add((peticion, myns_atr.dataVuelta, Literal(dataVuelta)))
-    gmess.add((peticion, myns_atr.precioHotel, Literal(precioHotel)))
-    gmess.add((peticion, myns_atr.estrellas, Literal(estrellas)))
-    gmess.add((peticion, myns_atr.roomQuantity, Literal(roomQuantity)))
-    gmess.add((peticion, myns_atr.adults, Literal(adults)))
-    gmess.add((peticion, myns_atr.radius, Literal(radius)))
+    # Construimos el mensaje de petición
+    selection_req = agn["AgenteUnificador-SeleccionAlojamiento"]
+    msg_graph.add((selection_req, agn.destinationCity, Literal(ciudadDestino)))
+    msg_graph.add((selection_req, agn.departureDate, Literal(fechaIda)))
+    msg_graph.add((selection_req, agn.comebackDate, Literal(fechaVuelta)))
+    msg_graph.add((selection_req, agn.hotelBudget, Literal(presupuestoAloj)))
+    msg_graph.add((selection_req, agn.ratings, Literal(estrellas)))
+    msg_graph.add((selection_req, agn.roomQuantity, Literal(nhabitaciones)))
+    msg_graph.add((selection_req, agn.adults, Literal(npersonas)))
+    msg_graph.add((selection_req, agn.radius, Literal(dcentro)))
 
-    gmess.bind('foaf', FOAF)
-    gmess.bind('dso', DSO)
-    req_obj = agn[AgenteUnificador.name + '-SolverAgent']
-    gmess.add((req_obj, RDF.type, DSO.SolverAgent))
-    gmess.add((req_obj, DSO.AgentType, DSO.PersonalAgent))
-
-    msg = build_message(gmess, perf=ACL.request,
-                        sender=AgenteUnificador.uri,
-                        receiver=GestorAlojamiento.uri,
-                        content=req_obj,
-                        msgcnt=mss_cnt)
-
-    gr = send_message(msg, GestorAlojamiento.address)
-
-    for s, p, o in gr:
-        print(s, p, o)
+    res_graph = send_message(build_message(msg_graph,
+                                           ACL.request,
+                                           sender=AgenteUnificador.uri,
+                                           receiver=GestorAlojamiento.uri,
+                                           content=selection_req,
+                                           msgcnt=mss_cnt), GestorAlojamiento.address)
 
     mss_cnt += 1
 
     logger.info('Alojamiento recibido')
 
-    return_dic['alojamiento'] = gr
+    return_dic["alojamiento"] = res_graph
 
 
 def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius,
@@ -345,9 +329,6 @@ def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, e
                         msgcnt=mss_cnt)
 
     gr = send_message(msg, GestorActividades.address)
-
-    for s, p, o in gr:
-        print(s, p, o)
 
     mss_cnt += 1
 

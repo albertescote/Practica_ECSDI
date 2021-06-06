@@ -1,134 +1,98 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Dec 27 15:58:13 2013
-
-Esqueleto de agente usando los servicios web de Flask
-
-/comm es la entrada para la recepcion de mensajes del agente
-/Stop es la entrada que para el agente
-
-Tiene una funcion AgentBehavior1 que se lanza como un thread concurrente
-
-Asume que el agente de registro esta en el puerto 9000
-
-@author: javier
+Agente de información de alojamiento y actividades. Se registra en el directorio de agentes como ello.
 """
 
-from amadeus import Client, ResponseError
-from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
-
-from multiprocessing import Array, Process, Queue
-import socket
+from multiprocessing import Process, Queue
 import logging
 import argparse
 
-from rdflib import Graph, RDF, Namespace, RDFS, Literal
-from rdflib.namespace import FOAF
-from flask import Flask , request, render_template
+from flask import Flask, request
+from rdflib import Graph, Namespace, Literal
+from rdflib.namespace import FOAF, RDF
 
+from AgentUtil.ACL import ACL
 from AgentUtil.AgentsPorts import PUERTO_INFO_AMADEUS, PUERTO_DIRECTORIO
 from AgentUtil.FlaskServer import shutdown_server
-from AgentUtil.Agent import Agent
-from AgentUtil.ACL import ACL
 from AgentUtil.ACLMessages import build_message, send_message, get_message_properties
-from AgentUtil.Coordenadas import COORDENADAS
-from AgentUtil.DSO import DSO
+from AgentUtil.Agent import Agent
 from AgentUtil.Logging import config_logger
+from AgentUtil.DSO import DSO
 from AgentUtil.Util import gethostname
+import socket
+
+from amadeus import Client, ResponseError
+from AgentUtil.APIKeys import AMADEUS_KEY, AMADEUS_SECRET
 from AgentUtil.IATACodes import convert_to_IATA
+from pprint import PrettyPrinter
 
-__author__ = 'javier'
-
-AMADEUS_END_POINT = 'https://test.api.amadeus.com/v2'
-
-amadeus = Client(
-    client_id=AMADEUS_KEY,
-    client_secret=AMADEUS_SECRET
-)
-
-# Definimos los parametros de la linea de comandos
+# Definimos los parámetros de la linea de comandos
 parser = argparse.ArgumentParser()
-parser.add_argument('--open', help="Define si el servidor est abierto al exterior o no", action='store_true',
+parser.add_argument("--open", help="Define si el servidor está abierto al exterior o no.", action="store_true",
                     default=False)
-parser.add_argument('--verbose', help="Genera un log de la comunicacion del servidor web", action='store_true',
-                        default=False)
-parser.add_argument('--port', type=int, help="Puerto de comunicacion del agente")
-parser.add_argument('--dhost', help="Host del agente de directorio")
-parser.add_argument('--dport', type=int, help="Puerto de comunicacion del agente de directorio")
+parser.add_argument("--port", type=int, help="Puerto de comunicación del agente.")
+parser.add_argument("--dhost", help="Host del agente de directorio.")
+parser.add_argument("--dport", type=int, help="Puerto de comunicación del agente de directorio.")
+parser.add_argument("--verbose", help="Genera un log de la comunicación del servidor web.", action="store_true",
+                    default=False)
 
 # Logging
 logger = config_logger(level=1)
 
-# parsing de los parametros de la linea de comandos
+# Parsing de los parámetros de la línea de comandos
 args = parser.parse_args()
 
-# Configuration stuff
-if args.port is None:
-    port = PUERTO_INFO_AMADEUS
-else:
-    port = args.port
-
+# Configuración
 if args.open:
-    hostname = '0.0.0.0'
+    hostname = "0.0.0.0"
     hostaddr = gethostname()
 else:
     hostaddr = hostname = socket.gethostname()
 
-if args.dport is None:
-    dport = PUERTO_DIRECTORIO
+if args.port is None:
+    port = PUERTO_INFO_AMADEUS
 else:
-    dport = args.dport
+    port = args.port
 
 if args.dhost is None:
     dhostname = socket.gethostname()
 else:
     dhostname = args.dhost
 
-# Flask stuff
-app = Flask(__name__)
+if args.dport is None:
+    dport = PUERTO_DIRECTORIO
+else:
+    dport = args.dport
+
 if not args.verbose:
-    log = logging.getLogger('werkzeug')
+    log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
 
 agn = Namespace("http://www.agentes.org#")
-myns = Namespace("http://www.agentes.org/")
-myns_pet = Namespace("http://www.agentes.org/peticiones/")
-myns_atr = Namespace("http://www.agentes.org/atributos/")
-myns_par = Namespace("http://my.namespace.org/parametros/")
-myns_hot = Namespace("http://my.namespace.org/hoteles/")
-myns_act = Namespace("http://my.namespace.org/actividades/")
+
+# Datos del agente de información de transporte
+InfoAmadeus = Agent("InfoAmadeus",
+                  agn.InfoAmadeus,
+                  "http://%s:%d/Comm" % (hostaddr, port),
+                  "http://%s:%d/Stop" % (hostaddr, port))
+
+# Datos del agente directorio
+DirectoryAgent = Agent("DirectoryAgent",
+                       agn.Directory,
+                       "http://%s:%d/Register" % (dhostname, dport),
+                       "http://%s:%d/Stop" % (dhostname, dport))
+
+# Grafo de estado del agente
+igraph = Graph()
+
+# Instanciamos el servidor Flask
+app = Flask(__name__)
 
 # Contador de mensajes
 mss_cnt = 0
 
-InfoAmadeus = Agent('InfoAmadeus',
-                       agn.InfoAmadeus,
-                       'http://%s:%d/comm' % (hostaddr, port),
-                       'http://%s:%d/Stop' % (hostaddr, port))
-
-# Directory agent address
-DirectoryAgent = Agent('DirectoryAgent',
-                       agn.Directory,
-                       'http://%s:%d/Register' % (dhostname, dport),
-                       'http://%s:%d/Stop' % (dhostname, dport))
-
-# Global triplestore graph
-dsgraph = Graph()
-
-# Vinculamos todos los espacios de nombre a utilizar
-dsgraph.bind('acl', ACL)
-dsgraph.bind('rdf', RDF)
-dsgraph.bind('rdfs', RDFS)
-dsgraph.bind('foaf', FOAF)
-dsgraph.bind('dso', DSO)
-
-cola1 = Queue()
-
-# Flask stuff
-app = Flask(__name__)
-if not args.verbose:
-    log = logging.getLogger('werkzeug')
-    log.setLevel(logging.ERROR)
+# Cola de comunicación entre procesos
+queue1 = Queue()
 
 def registrar_hoteles():
     """
@@ -211,56 +175,56 @@ def hello():
 @app.route("/comm")
 def comunicacion():
     """
-    Entrypoint de comunicacion
+    Entry point de comunicación con el agente.
+
+    Retorna un objeto que representa el resultado de una búsqueda de alojamiento o actividades.
+
+    Asumimos que se reciben siempre acciones correctas, que se refieren a lo que puede hacer el agente, y que las
+    acciones se reciben en un mensaje de tipo ACL.request.
     """
-    global dsgraph
+    global igraph
     global mss_cnt
 
-    # Extraemos el mensaje y creamos un grafo con el
-    message = request.args['content']
-    gm = Graph()
-    gm.parse(data=message)
 
-    msgdic = get_message_properties(gm)
+    # Extraemos el mensaje y creamos un grafo con él
+    message = request.args["content"]
+    msg_graph = Graph()
+    msg_graph.parse(data=message)
 
-    # Comprobamos que sea un mensaje FIPA ACL
-    if msgdic is None:
-        # Si no es, respondemos que no hemos entendido el mensaje
-        gr = build_message(Graph(), ACL['not-understood'], sender=InfoAmadeus.uri, msgcnt=mss_cnt)
+    msgdic = get_message_properties(msg_graph)
+
+    # Comprobamos que sea un mensaje FIPA-ACL
+    if not msgdic:
+        # Si no lo es, respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=InfoAmadeus.uri,
+                                  msgcnt=mss_cnt)
+    elif msgdic["performative"] != ACL.request:
+        # Si la performativa no es de tipo 'request', respondemos que no hemos entendido el mensaje
+        res_graph = build_message(Graph(),
+                                  ACL["not-understood"],
+                                  sender=InfoAmadeus.uri,
+                                  msgcnt=mss_cnt)
     else:
-        # Obtenemos la performativa
-        perf = msgdic['performative']
+        # Averiguamos el tipo de la accion
+        if 'content' in msgdic:
+            content = msgdic['content']
+            accion = msg_graph.value(subject=content, predicate=RDF.type)
+            agent = msg_graph.value(subject=content, predicate=DSO.AgentType)
 
-        if perf != ACL.request:
-            # Si no es un request, respondemos que no hemos entendido el mensaje
-            gr = build_message(Graph(), ACL['not-understood'], sender=InfoAmadeus.uri, msgcnt=mss_cnt)
-        else:
-            # Extraemos el objeto del contenido que ha de ser una accion de la ontologia de acciones del agente
-            # de registro
+        if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
+            logger.info('Peticion de alojamiento recibida')
+            gr = infoHoteles(msg_graph, msgdic)
+        elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
+            logger.info('Peticion de actividades recibida')
+            gr = infoActividades(msg_graph, msgdic)
 
-            # Averiguamos el tipo de la accion
-            if 'content' in msgdic:
-                content = msgdic['content']
-                accion = gm.value(subject=content, predicate=RDF.type)
-                agent = gm.value(subject=content, predicate=DSO.AgentType)
-
-            if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
-                logger.info('Peticion de alojamiento recibida')
-                gr = infoHoteles(gm, msgdic)
-            elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
-                logger.info('Peticion de actividades recibida')
-                gr = infoActividades(gm, msgdic)
-            else:
-                gr = build_message(Graph(),
-                                   ACL['not-understood'],
-                                   sender=InfoAmadeus.uri,
-                                   msgcnt=mss_cnt)    
     mss_cnt += 1
 
     logger.info('Respondemos a la peticion')
 
-    return gr.serialize(format='xml')
-
+    return res_graph.serialize(format="xml")
 
 @app.route("/Stop")
 def stop():
@@ -294,57 +258,68 @@ def agentbehavior1():
     except:
         logger.info("DirectoryAgent no localizado")
 
-def infoHoteles(gm, msgdic):
-    busqueda = myns_pet["ConsultarOpcionesAlojamiento"]
+def infoHoteles(msg_graph, msgdic):
+    """
+    Retorna un mensaje en formato FIPA-ACL, de tipo 'inform', que contiene el resultado de la búsqueda de alojamientos hecha
+    en la API Amadeus con los criterio de búsqueda que hay en el grafo msg_graph, pasado como parámetro. En caso de
+    producirse un error, la función retorna un mensaje FIPA-ACL de tipo 'failure'.
+    """
+    res_graph = Graph()
 
-    ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
-    ciudadIATA = convert_to_IATA(str(ciudadDestino))
-    dataIda = gm.value(subject= busqueda, predicate= myns_par.dataIda)
-    dataVuelta = gm.value(subject= busqueda, predicate= myns_par.dataVuelta)
-    precioHotel = gm.value(subject= busqueda, predicate= myns_par.precioHotel)
-    estrellas = gm.value(subject= busqueda, predicate= myns_par.estrellas)
-    roomQuantity = gm.value(subject= busqueda, predicate= myns_par.roomQuantity)
-    adults = gm.value(subject= busqueda, predicate= myns_par.adults)
-    radius = gm.value(subject= busqueda, predicate= myns_par.radius)
+    # Extraemos los campos de búsqueda del contenido del mensaje, una vez que este está expresado como un grafo
+    search_req = agn["GestorAlojamiento-InfoSearch"]
+    selection_req = agn["AgenteUnificador-SeleccionAlojamiento"]
+    destinationCity = msg_graph.value(subject=selection_req, predicate=agn.destinationCity)
+    destinationIATA = convert_to_IATA(str(destinationCity))
+    departureDate = msg_graph.value(subject=selection_req, predicate=agn.departureDate)
+    comebackDate = msg_graph.value(subject=selection_req, predicate=agn.comebackDate)
+    hotelBudget = msg_graph.value(subject=selection_req, predicate=agn.hotelBudget)
+    ratings = msg_graph.value(subject=selection_req, predicate=agn.ratings)
+    roomQuantity = msg_graph.value(subject=selection_req, predicate=agn.roomQuantity)
+    adults = msg_graph.value(subject=selection_req, predicate=agn.adults)
+    radius = msg_graph.value(subject=selection_req, predicate=agn.radius)
 
-    gr = Graph()
-    try:                  
-        response = amadeus.shopping.hotel_offers.get(cityCode=str(ciudadIATA), 
+    amadeus = Client(
+        client_id=AMADEUS_KEY,
+        client_secret=AMADEUS_SECRET
+    )
+
+    try:
+        # Hace la búsqueda a la API Amadeus a través de su librería y guarda el resultado en formato JSON (accesible
+        # como si fuera un diccionario Python)
+        response = amadeus.shopping.hotel_offers.get(cityCode=str(destinationIATA), 
                                                     roomQuantity=int(roomQuantity),
                                                     adults=int(adults),
                                                     radius=int(radius),
-                                                    ratings=int(estrellas),
-                                                    priceRange=precioHotel,
+                                                    ratings=int(ratings),
+                                                    priceRange=hotelBudget,
                                                     currency='EUR',
                                                     view='LIGHT',
-                                                    )            
+                                                    )
         
-        gr.bind('myns_hot', myns_hot)
-
         h = response.data[0]
         hotel = h['hotel']['hotelId']
         address = h['hotel']['address']['lines'][0] + ', ' + h['hotel']['address']['cityName'] + ', ' + h['hotel']['address']['postalCode']
-        hotel_obj = myns_hot[hotel]
-        gr.add((hotel_obj, myns_atr.esUn, myns.hotel))
-        gr.add((hotel_obj, myns_atr.nombre, Literal(h['hotel']['name'])))
-        gr.add((hotel_obj, myns_atr.direccion, Literal(address)))
+        hotel_obj = agn[hotel]
+        res_graph.add((hotel_obj, agn.esUn, agn.Hotel))
+        res_graph.add((hotel_obj, agn.Nombre, Literal(h['hotel']['name'])))
+        res_graph.add((hotel_obj, agn.Direccion, Literal(address)))
 
-        # Aqui realizariamos lo que pide la accion
-        # Por ahora simplemente retornamos un Inform-done
-        gr = build_message(gr,
-                            ACL['confirm'],
-                            sender=InfoAmadeus.uri,
-                            msgcnt=mss_cnt,
-                            receiver=msgdic['sender'], )
+        res_graph = build_message(res_graph,
+                                    ACL["inform"],
+                                    sender=InfoAmadeus.uri,
+                                    receiver=msgdic['sender'],
+                                    msgcnt=mss_cnt)
+
     except ResponseError as error:
         logger.info(error)
-        gr = build_message(gr,
-                            ACL['failure'],
-                            sender=InfoAmadeus.uri,
-                            msgcnt=mss_cnt,
-                            receiver=msgdic['sender'], )
+        res_graph = build_message(res_graph,
+                                  ACL["failure"],
+                                  sender=InfoAmadeus.uri,
+                                  receiver=msgdic['sender'],
+                                  msgcnt=mss_cnt)
     finally:
-        return gr
+        return res_graph
 
 def infoActividades(gm, msgdic):
     busqueda = myns_pet["ConsultarOpcionesActividades"]
