@@ -55,7 +55,7 @@ if not args.verbose:
     log = logging.getLogger("werkzeug")
     log.setLevel(logging.ERROR)
 
-agn = Namespace("http://www.agentes.org/")
+agn = Namespace("http://www.agentes.org#")
 myns = Namespace("http://www.agentes.org/")
 myns_pet = Namespace("http://www.agentes.org/peticiones/")
 myns_atr = Namespace("http://www.agentes.org/atributos/")
@@ -69,7 +69,7 @@ AgenteUnificador = Agent('AgenteUnificador',
 # Datos del agente gestor de transporte
 GestorTransporte = Agent("GestorTransporte",
                          agn.GestorTransporte,
-                         "http://%s:%d/Comm" % (hostaddr, PUERTO_GESTOR_TRANSPORTE),
+                         "http://%s:%d/comm" % (hostaddr, PUERTO_GESTOR_TRANSPORTE),
                          "http://%s:%d/Stop" % (hostaddr, PUERTO_GESTOR_TRANSPORTE))
 
 # Datos del agente gestor de alojamiento
@@ -134,7 +134,7 @@ def peticionPlan():
             ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
             return_dic))
         p3 = Process(target=pedirSeleccionTransporte,
-                     args=(ciudadDestino, ciudadOrigen, npersonas, presupuestoVuelo, return_dic))
+                     args=(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta, presupuestoVuelo, return_dic))
 
         # Ejecuta los procesos
         p1.start()
@@ -148,30 +148,37 @@ def peticionPlan():
 
         # Extraemos por separado, del objeto compartido por los procesos 'return_dic', los grafos con los resultados de
         # la selección de transporte, alojamiento y actividades.
-        # graph_trans = return_dic["transporte"]
+        graph_trans = return_dic["transporte"]
         graph_aloj = return_dic["alojamiento"]
         graph_act = return_dic["actividades"]
 
         # Obtenemos la performativa de los mensajes en los tres casos
-        # msgdic_trans = get_message_properties(graph_trans)
+        msgdic_trans = get_message_properties(graph_trans)
         msgdic_aloj = get_message_properties(graph_aloj)
         msgdic_act = get_message_properties(graph_act)
 
-        # perf_trans = msgdic_trans["performative"]
+        perf_trans = msgdic_trans["performative"]
         perf_aloj = msgdic_aloj["performative"]
         perf_act = msgdic_act["performative"]
 
-        if perf_aloj == ACL.failure or perf_act == ACL.failure:
+        print("perf_trans", perf_trans)
+        print("perf_aloj", perf_aloj)
+        print("perf_act", perf_act)
+
+        if perf_trans == ACL.failure or perf_aloj == ACL.failure or perf_act == ACL.failure:
             displayData = {
                 "error": 1,
                 "errorMessage": "Parámetros de entrada no válidos."
             }
-        elif perf_aloj == ACL.cancel or perf_act == ACL.cancel:
+        elif perf_trans == ACL.cancel or perf_aloj == ACL.cancel or perf_act == ACL.cancel:
             displayData = {
                 "error": 1,
                 "errorMessage": "No se ha encontrado ningún agente de información."
             }
         else:
+            gsearch = graph_trans.triples((None, agn.esUn, agn.Billete))
+            billete = next(gsearch)[0]
+
             gsearch = graph_aloj.triples((None, myns_atr.esUn, myns.hotel))
             alojamiento = next(gsearch)[0]
             nombre_aloj = graph_aloj.value(subject=alojamiento, predicate=myns_atr.nombre)
@@ -226,11 +233,39 @@ def tidyup():
     pass
 
 
-def pedirSeleccionTransporte(ciudadDestino, ciudadOrigen, adults, budget, return_dic):
-    logger.info('Iniciamos busqueda de Transporte')
-    gr = Graph()
-    logger.info('Transporte recibido')
-    return_dic['transporte'] = gr
+def pedirSeleccionTransporte(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta, presupuestoVuelo, return_dic):
+    global mss_cnt
+
+    logger.info('Pide selección de transporte.')
+
+    msg_graph = Graph()
+
+    # Vinculamos todos los espacios de nombres a utilizar
+    msg_graph.bind("agn", agn)
+
+    # Construimos el mensaje de petición
+    selection_req = agn["AgenteUnificador-SeleccionTransporte"]
+    msg_graph.add((selection_req, agn.originCity, Literal(ciudadOrigen)))
+    msg_graph.add((selection_req, agn.destinationCity, Literal(ciudadDestino)))
+    msg_graph.add((selection_req, agn.departureDate, Literal(fechaIda)))
+    msg_graph.add((selection_req, agn.comebackDate, Literal(fechaVuelta)))
+    msg_graph.add((selection_req, agn.budget, Literal(presupuestoVuelo)))
+
+    res_graph = send_message(build_message(msg_graph,
+                                           ACL.request,
+                                           sender=AgenteUnificador.uri,
+                                           receiver=GestorTransporte.uri,
+                                           content=selection_req,
+                                           msgcnt=mss_cnt), GestorTransporte.address)
+
+    for s, p, o in res_graph:
+        print(s, p, o)
+
+    mss_cnt += 1
+
+    return_dic["transporte"] = res_graph
+
+    logger.info("Selección de transporte recibida.")
 
 
 def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, estrellas, roomQuantity, adults, radius,
@@ -266,6 +301,9 @@ def pedirSeleccionAlojamiento(ciudadDestino, dataIda, dataVuelta, precioHotel, e
                         msgcnt=mss_cnt)
 
     gr = send_message(msg, GestorAlojamiento.address)
+
+    for s, p, o in gr:
+        print(s, p, o)
 
     mss_cnt += 1
 
@@ -307,6 +345,9 @@ def pedirSeleccionActividades(ciudadDestino, dataIda, dataVuelta, precioHotel, e
                         msgcnt=mss_cnt)
 
     gr = send_message(msg, GestorActividades.address)
+
+    for s, p, o in gr:
+        print(s, p, o)
 
     mss_cnt += 1
 
