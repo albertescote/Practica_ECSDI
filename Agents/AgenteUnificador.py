@@ -100,6 +100,10 @@ def main():
 
 @app.route("/", methods=['POST'])
 def peticionPlan():
+    """
+    Función principal. Extrae el valor de los campos del formulario e inicia las acciones para obtener una propuesta
+    de plan de viaje, en paralelo. Posteriormente, junta todas las partes del plan y se lo envia al usuario.
+    """
     # Extraemos el valor de los campos del formulario
 
     # General
@@ -122,7 +126,6 @@ def peticionPlan():
     date_time_ida = datetime.datetime.strptime(fechaIda, '%Y-%m-%d')
     date_time_vuelta = datetime.datetime.strptime(fechaVuelta, '%Y-%m-%d')
     dias_de_viaje = (date_time_vuelta - date_time_ida).days
-
 
     displayData = None
 
@@ -176,7 +179,6 @@ def peticionPlan():
         else:
             gsearch = graph_trans.triples((None, agn.esUn, agn.Billete))
             billete = next(gsearch)[0]
-
             id_billete = graph_trans.value(subject=billete, predicate=agn.Id)
             hora_salida_billete = graph_trans.value(subject=billete, predicate=agn.DiaHoraSalida)
             hora_llegada_billete = graph_trans.value(subject=billete, predicate=agn.DiaHoraLlegada)
@@ -190,7 +192,6 @@ def peticionPlan():
             direccion_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Direccion)
             precio_aloj = graph_aloj.value(subject=alojamiento, predicate=agn.Precio)
 
-            # TODO: Coger y mostrar la información de más de una actividad
             gsearch = graph_act.triples((None, agn.esUn, agn.activity))
             actividades_manana = []
             actividades_tarde = []
@@ -203,6 +204,7 @@ def peticionPlan():
                     actividades_tarde.append(str(graph_act.value(subject=actividad, predicate=agn.nombre)))
                 elif graph_act.value(subject=actividad, predicate=agn.horario) == Literal('noche'):
                     actividades_noche.append(str(graph_act.value(subject=actividad, predicate=agn.nombre)))
+
             displayData = {
                 "error": 0,
                 "ciudadOrigen": ciudadOrigen,
@@ -258,9 +260,12 @@ def tidyup():
 
 
 def pedirSeleccionTransporte(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta, presupuestoVuelo, return_dic):
+    """
+    Retorna un grafo con la opción de transporte seleccionada según los criterios de búsqueda.
+    """
     global mss_cnt
 
-    logger.info('Pide selección de transporte.')
+    logger.info("Pide selección de transporte.")
 
     msg_graph = Graph()
 
@@ -286,14 +291,18 @@ def pedirSeleccionTransporte(ciudadOrigen, ciudadDestino, fechaIda, fechaVuelta,
 
     return_dic["transporte"] = res_graph
 
-    logger.info("Selección de transporte recibida.")
+    logger.info("Recibe la selección de transporte.")
 
 
-def pedirSeleccionAlojamiento(ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones, npersonas, dcentro,
-            return_dic):
+def pedirSeleccionAlojamiento(ciudadDestino, fechaIda, fechaVuelta, presupuestoAloj, estrellas, nhabitaciones,
+                              npersonas, dcentro,
+                              return_dic):
+    """
+    Retorna un grafo con la opción de alojamiento seleccionada según los criterios de búsqueda.
+    """
     global mss_cnt
 
-    logger.info('Iniciamos busqueda de alojamiento')
+    logger.info("Pide selección de alojamiento.")
 
     msg_graph = Graph()
 
@@ -322,14 +331,17 @@ def pedirSeleccionAlojamiento(ciudadDestino, fechaIda, fechaVuelta, presupuestoA
 
     mss_cnt += 1
 
-    logger.info('Alojamiento recibido')
+    logger.info("Recibe la selección de alojamiento.")
 
     return_dic["alojamiento"] = res_graph
 
 
 def pedirSeleccionActividades(ciudadDestino, diasDeViaje, radius, return_dic):
+    """
+    Retorna un grafo con el conjunto de actividades seleccionadas según los criterios de búsqueda.
+    """
     global mss_cnt
-    logger.info('Iniciamos busqueda de actividades')
+    logger.info("Pide selección de actividades.")
 
     msg_graph = Graph()
 
@@ -352,7 +364,7 @@ def pedirSeleccionActividades(ciudadDestino, diasDeViaje, radius, return_dic):
 
     mss_cnt += 1
 
-    logger.info('Actividades recibidas')
+    logger.info("Recibe la selección de actividades.")
 
     return_dic['actividades'] = res_graph
 
