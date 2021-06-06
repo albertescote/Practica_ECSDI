@@ -65,7 +65,7 @@ if not args.verbose:
 
 agn = Namespace("http://www.agentes.org#")
 
-# Datos del agente gestor de transporte
+# Datos del agente gestor de alojamiento
 GestorAlojamiento = Agent("GestorAlojamiento",
                           agn.GestorAlojamiento,
                           "http://%s:%d/comm" % (hostaddr, port),

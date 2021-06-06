@@ -93,9 +93,6 @@ app = Flask(__name__)
 # Contador de mensajes
 mss_cnt = 0
 
-# Cola de comunicación entre procesos
-queue1 = Queue()
-
 
 # ENTRY POINTS
 @app.route("/comm")
