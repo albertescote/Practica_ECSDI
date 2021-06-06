@@ -92,6 +92,7 @@ app = Flask(__name__)
 mss_cnt = 0
 
 
+# ENTRY POINTS
 @app.route("/comm")
 def comunicacion():
     """
