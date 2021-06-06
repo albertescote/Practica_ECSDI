@@ -133,7 +133,16 @@ def comunication():
         # Envía una mensaje de tipo ACL.request al agente de información de vuelos
         res_graph = infoagent_search(agn_addr, agn_uri, req_graph)
 
-        res_graph = build_message(res_graph,
+        # Selecciona un billete cualquiera del conjunto de billetes recibido, que cumplen con las restricciones
+        # de búsqueda. Es una selección simple que no tiene en cuenta otra preferencias del usuario, como su
+        # historial de compra pasado.
+        gsearch = res_graph.triples((None, agn.esUn, agn.Billete))
+        billete = next(gsearch)[0]
+        aux_graph = Graph()
+        for subject, predicate, object in res_graph.triples((billete, None, None)):
+            aux_graph.add((billete, predicate, object))
+
+        res_graph = build_message(aux_graph,
                                   ACL["confirm"],
                                   sender=GestorTransporte.uri,
                                   msgcnt=mss_cnt)
