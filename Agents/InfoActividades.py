@@ -243,7 +243,6 @@ def infoActividades(msg_graph, msgdic):
                                                 radius=radius)
 
         for activity in response.data:
-            logger.info(activity)
             activity_obj = agn[activity['id']]
             res_graph.add((activity_obj, agn.esUn, agn.activity))
             res_graph.add((activity_obj, agn.nombre, Literal(activity['name'])))
