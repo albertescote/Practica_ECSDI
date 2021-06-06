@@ -73,7 +73,7 @@ agn = Namespace("http://www.agentes.org#")
 # Datos del agente de información de transporte
 InfoAgent = Agent("TransportInfoAgent",
                   agn.AgentInfo,
-                  "http://%s:%d/Comm" % (hostaddr, port),
+                  "http://%s:%d/comm" % (hostaddr, port),
                   "http://%s:%d/Stop" % (hostaddr, port))
 
 # Datos del agente directorio
@@ -96,7 +96,7 @@ queue1 = Queue()
 
 
 # ENTRY POINTS
-@app.route("/Comm")
+@app.route("/comm")
 def comunication():
     """
     Entry point de comunicación con el agente.

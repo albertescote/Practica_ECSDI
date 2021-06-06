@@ -242,12 +242,14 @@ def infoagent_search(agn_addr, agn_uri, req_graph):
     msg_graph.add((search_req, agn.adults, Literal(adults)))
     msg_graph.add((search_req, agn.radius, Literal(radius)))
 
-    res_graph = send_message(build_message(msg_graph,
-                                           ACL.request,
-                                           sender=GestorAlojamiento.uri,
-                                           receiver=agn_uri,
-                                           content=search_req,
-                                           msgcnt=mss_cnt), agn_addr)
+    msg = build_message(msg_graph,
+                        perf=ACL.request,
+                        sender=GestorAlojamiento.uri,
+                        receiver=agn_uri,
+                        content=search_req,
+                        msgcnt=mss_cnt)
+    logger.info(agn_addr)
+    res_graph = send_message(msg, agn_addr)
 
     mss_cnt += 1
     logger.info('Alojamientos recibidos')

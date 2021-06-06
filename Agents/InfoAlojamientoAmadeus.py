@@ -73,7 +73,7 @@ agn = Namespace("http://www.agentes.org#")
 # Datos del agente de información de transporte
 InfoAmadeus = Agent("InfoAmadeus",
                   agn.InfoAmadeus,
-                  "http://%s:%d/Comm" % (hostaddr, port),
+                  "http://%s:%d/comm" % (hostaddr, port),
                   "http://%s:%d/Stop" % (hostaddr, port))
 
 # Datos del agente directorio
@@ -185,7 +185,7 @@ def comunicacion():
     global igraph
     global mss_cnt
 
-
+    logger.info('Peticion de alojamiento recibida')
     # Extraemos el mensaje y creamos un grafo con él
     message = request.args["content"]
     msg_graph = Graph()
@@ -207,18 +207,8 @@ def comunicacion():
                                   sender=InfoAmadeus.uri,
                                   msgcnt=mss_cnt)
     else:
-        # Averiguamos el tipo de la accion
-        if 'content' in msgdic:
-            content = msgdic['content']
-            accion = msg_graph.value(subject=content, predicate=RDF.type)
-            agent = msg_graph.value(subject=content, predicate=DSO.AgentType)
-
-        if accion == DSO.InfoAgent and agent == DSO.HotelsAgent:
-            logger.info('Peticion de alojamiento recibida')
-            gr = infoHoteles(msg_graph, msgdic)
-        elif accion == DSO.InfoAgent and agent == DSO.TravelServiceAgent:
-            logger.info('Peticion de actividades recibida')
-            gr = infoActividades(msg_graph, msgdic)
+        logger.info('Peticion de alojamiento recibida')
+        res_graph = infoHoteles(msg_graph, msgdic)
 
     mss_cnt += 1
 
@@ -268,16 +258,15 @@ def infoHoteles(msg_graph, msgdic):
 
     # Extraemos los campos de búsqueda del contenido del mensaje, una vez que este está expresado como un grafo
     search_req = agn["GestorAlojamiento-InfoSearch"]
-    selection_req = agn["AgenteUnificador-SeleccionAlojamiento"]
-    destinationCity = msg_graph.value(subject=selection_req, predicate=agn.destinationCity)
+    destinationCity = msg_graph.value(subject=search_req, predicate=agn.destinationCity)
     destinationIATA = convert_to_IATA(str(destinationCity))
-    departureDate = msg_graph.value(subject=selection_req, predicate=agn.departureDate)
-    comebackDate = msg_graph.value(subject=selection_req, predicate=agn.comebackDate)
-    hotelBudget = msg_graph.value(subject=selection_req, predicate=agn.hotelBudget)
-    ratings = msg_graph.value(subject=selection_req, predicate=agn.ratings)
-    roomQuantity = msg_graph.value(subject=selection_req, predicate=agn.roomQuantity)
-    adults = msg_graph.value(subject=selection_req, predicate=agn.adults)
-    radius = msg_graph.value(subject=selection_req, predicate=agn.radius)
+    departureDate = msg_graph.value(subject=search_req, predicate=agn.departureDate)
+    comebackDate = msg_graph.value(subject=search_req, predicate=agn.comebackDate)
+    hotelBudget = msg_graph.value(subject=search_req, predicate=agn.hotelBudget)
+    ratings = msg_graph.value(subject=search_req, predicate=agn.ratings)
+    roomQuantity = msg_graph.value(subject=search_req, predicate=agn.roomQuantity)
+    adults = msg_graph.value(subject=search_req, predicate=agn.adults)
+    radius = msg_graph.value(subject=search_req, predicate=agn.radius)
 
     amadeus = Client(
         client_id=AMADEUS_KEY,
@@ -321,7 +310,7 @@ def infoHoteles(msg_graph, msgdic):
     finally:
         return res_graph
 
-def infoActividades(gm, msgdic):
+""" def infoActividades(gm, msgdic):
     busqueda = myns_pet["ConsultarOpcionesActividades"]
 
     ciudadDestino = gm.value(subject= busqueda, predicate= myns_par.ciudadDestino)
@@ -355,7 +344,7 @@ def infoActividades(gm, msgdic):
                         msgcnt=mss_cnt,
                         receiver=msgdic['sender'], )
     return gr
-
+ """
 if __name__ == '__main__':
     # Ponemos en marcha los behaviors
     ab1 = Process(target=agentbehavior1)

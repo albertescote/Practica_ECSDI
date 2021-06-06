@@ -282,12 +282,14 @@ def pedirSeleccionAlojamiento(ciudadDestino, fechaIda, fechaVuelta, presupuestoA
     msg_graph.add((selection_req, agn.adults, Literal(npersonas)))
     msg_graph.add((selection_req, agn.radius, Literal(dcentro)))
 
-    res_graph = send_message(build_message(msg_graph,
-                                           ACL.request,
-                                           sender=AgenteUnificador.uri,
-                                           receiver=GestorAlojamiento.uri,
-                                           content=selection_req,
-                                           msgcnt=mss_cnt), GestorAlojamiento.address)
+    msg = build_message(msg_graph,
+                        perf=ACL.request,
+                        sender=AgenteUnificador.uri,
+                        receiver=GestorAlojamiento.uri,
+                        content=selection_req,
+                        msgcnt=mss_cnt)
+
+    res_graph = send_message(msg, GestorAlojamiento.address)
 
     mss_cnt += 1
 
